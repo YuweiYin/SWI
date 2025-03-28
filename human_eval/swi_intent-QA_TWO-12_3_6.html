@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="author" content="Yuwei Yin and EunJeong Hwang">
+  <title>Intent Quality Evaluation</title>
+
+<style>
+  * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+  }
+
+  html, body {
+      height: 140%;
+      font-family: Arial, sans-serif;
+      background-color: #f0f2f5; 
+  }
+
+  body {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px;
+  }
+
+  .container {
+      display: flex;
+      width: 100%;
+      max-width: 100%; 
+      gap: 20px;
+  }
+
+  .section {
+      background-color: #ffffff;
+      border: 1px solid #ddd; 
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      width: 70%;
+      margin: auto;
+  }
+  
+  .instructions {
+      background-color: #e8f4fd;
+      border: 1px solid #a0c4ff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .instructions h2 {
+      margin-bottom: 15px;
+      color: #00509e;
+  }
+
+  .instructions p {
+      margin-bottom: 10px;
+      color: #333;
+      line-height: 1.6;
+  }
+
+  .instructions ul {
+      list-style-type: disc;
+      margin-left: 20px;
+      margin-bottom: 10px;
+  }
+
+  .instructions ul li {
+      margin-bottom: 8px;
+      color: #333;
+  }
+
+  .crowd-form {
+      flex: 2.2; 
+  }
+
+  .section h2, .section h3 {
+      margin-bottom: 20px;
+      color: #333;
+  }
+
+  .evaluation-block {
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+  }
+
+  .evaluation-block h4 {
+      margin-bottom: 15px;
+      color: #333;
+      font-size: 16px;
+  }
+
+  .full-body {
+      display: flex;
+      flex-direction: column;
+  }
+  
+  .progress-container {
+      width: 100%;
+      background-color: #e0e0e0;
+      border-radius: 25px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      height: 20px;
+  }
+
+  .progress-bar {
+      height: 100%;
+      width: 0%;
+      background-color: #4CAF50;
+      transition: width 0.3s ease;
+  }
+  
+  .validation-message {
+      color: red;
+      margin-top: 10px;
+      font-size: 14px;
+  }
+
+  /* @media {
+      .container {
+          flex-direction: column;
+          align-items: stretch;
+      }
+
+      .section {
+          height: auto;
+      }
+  } */
+
+  .stacked-radio label {
+      display: block;
+      margin-bottom: 5px;
+  }
+
+  input[type="text"] {
+      border: 1px solid #ccc; 
+      border-radius: 5px; 
+      padding: 10px;
+      font-size: 16px; 
+      width: 100%; 
+      max-width: 500px;
+      box-sizing: border-box;
+      margin: 5px 0px;
+  }
+
+  input[type="text"]:focus {
+      border-color: #007bff; 
+      outline: none; 
+      box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); 
+  }
+  .navigation-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 20px;
+  }
+
+  .navigation-buttons button {
+      background-color: #4CAF50; 
+      color: #fff;
+      padding: 12px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .navigation-buttons button:hover {
+      background-color: #45a049; 
+      transform: translateY(-2px);
+  }
+
+  .navigation-buttons button:active {
+      background-color: #3e8e41; 
+      transform: translateY(0);
+  }
+
+  .navigation-buttons button:disabled {
+      background-color: #ccc; 
+      cursor: not-allowed;
+      box-shadow: none;
+  }
+  /* Style for the image container */
+  .source_image {
+      max-width: 600px; /* Restricts maximum width */
+      width: 100%; /* Makes the image responsive */
+      margin: 0 auto; /* Centers the image horizontally */
+      display: block; /* Ensures proper alignment */
+      border: 1px solid #ddd; /* Adds a subtle border around the image */
+      border-radius: 5px; /* Rounds the corners of the image border */
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Adds a soft shadow effect */
+  }
+  
+  /* Style for the caption */
+  h4 {
+      text-align: center; /* Centers the caption text */
+      margin-top: 10px; /* Adds space above the caption */
+      font-size: 1.2em; /* Adjusts the font size */
+      color: #333; /* Sets a dark gray color for readability */
+  }
+  
+  /* Horizontal line styling */
+  hr {
+      border: none; /* Removes the default border */
+      border-top: 1px solid #ccc; /* Adds a subtle top border */
+      margin: 20px 0; /* Adds spacing above and below */
+  }
+  
+  /* Styling for the instruction text */
+  h5 {
+      text-align: center; /* Centers the text */
+      font-weight: 500; /* Makes the text slightly bolder */
+      color: #555; /* Sets a medium gray color for readability */
+      line-height: 1.5; /* Improves text spacing */
+      margin: 15px 0; /* Adds vertical spacing */
+  }
+  
+  /* Style for the hidden instruction row */
+  #instruction_small {
+      text-align: center; /* Centers the instruction */
+      font-size: 1em; /* Sets a comfortable font size */
+      color: #444; /* Sets a dark gray color */
+      line-height: 1.5; /* Adds space between lines */
+      margin-top: 10px; /* Adds some space above */
+      padding: 10px; /* Adds padding inside the container */
+      border: 1px solid #ccc; /* Adds a border for emphasis */
+      border-radius: 5px; /* Rounds the edges */
+      background-color: #f9f9f9; /* Sets a light background color */
+  }
+
+  INTENT {color: red;}
+    
+  .evaluation-table,.example-table {
+      width: 100%;
+      border-collapse: collapse;
+  }
+
+  .evaluation-table th, .evaluation-table td, .example-table th, .example-table td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      vertical-align: top;
+  }
+
+  .evaluation-table th {
+      text-align: left;
+      background-color: #f2f2f2;
+      width: 50%;
+      font-size: 20px;
+  }
+
+  .example-table th {
+      text-align: left;
+      background-color: #f2f2f2;
+      width: 30%;
+  }
+
+  .evaluation-table td > p, .example-table td > p {
+      margin: 0;
+  }
+
+  .expandable-response {
+      max-height: 6em;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 5px;
+      background: #f9f9f9;
+  }
+
+  .radio-group-container {
+      margin-bottom: 10px;
+  }
+
+    .panel-heading {
+        font-size: 1.5em;
+        font-weight: bold;
+        background-color: #f2f2f2;
+        border-bottom: 2px solid #ccc;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        color: #333;
+    }
+
+    .panel-body {
+        font-size: 1em;
+        line-height: 1.6;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        color: #333;
+    }
+
+    .panel-body ol {
+        margin-left: 20px;
+    }
+
+    .panel-body li {
+        margin-bottom: 10px;
+    }
+
+    .panel-body p {
+        margin-bottom: 15px;
+    }
+
+    .example-heading {
+        font-size: 1.5em;
+        font-weight: bold;
+        background-color: #f2f2f2;
+        border-bottom: 2px solid #ccc;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        color: #333;
+
+        /*font-size: 1.5em;*/
+        /*font-weight: bold;*/
+        /*color: #444;*/
+        /*background-color: #e6f7ff;*/
+        /*padding: 10px 15px;*/
+        /*margin-bottom: 15px;*/
+        /*border-left: 5px solid #1890ff;*/
+    }
+
+    .example-section {
+        background-color: #f9f9f9;
+        border: 1px solid #ccc;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .task-heading {
+        font-size: 1.8em;
+        font-weight: bold;
+        color: #333;
+        background-color: #f0f8ff;
+        padding: 15px 20px;
+        border: 2px solid #87cefa;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .toggle-button {
+        background-color: #1890ff;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        font-size: 1em;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .toggle-button:hover {
+        background-color: #005bb5;
+    }
+</style>
+
+</head>
+
+<body>
+  <div class="full-body">
+    <div class="section instructions">
+      <h2>Instructions</h2>
+      <p>
+        <strong>Thanks for participating! Please read the instructions carefully.</strong>
+      </p>
+      <p>
+        A user has answered six science questions. In the user's analysis, the <span style="color:red;">user's intents</span> (marked in <span style="color:red;">red</span>) are explicitly stated. Each <span style="color:red;">intent statement</span> reflects the user's intent for planning, analyzing, and reasoning.
+        <br/>
+        Definition of <span style="color:red;">Intent</span>: The fact that you want and plan to do something; A usually clearly formulated or planned intention.
+        <br/>
+        Synonyms of <span style="color:red;">Intent</span>: intention, aim, purpose, goal, target, objective, etc.
+        <br/>
+        <b>Your Task</b>: Please <b>evaluate the <span style="color:red;">user's intent</span></b> using the following criteria:
+      </p>
+
+      <ul>
+        <li><b>1. Coherence</b>: In general, does the user's analysis align coherently with the <span style="color:red;">intent statements</span>?</li>
+        <li><b>2. Effectiveness</b>: Overall, do the <span style="color:red;">intent statements</span> help with the planning and reasoning for answering the question?</li>
+        <li><b>3. Interpretability</b>: Do you think providing the <span style="color:red;">intent</span> can help you better understand the reasoning process than not providing it?</li>
+      </ul>
+
+      <p>
+        <b>Examples</b>:
+        <br/>
+        Intent of <b>good coherence</b>: <span style="color:red;">I will first compute the sum of 3 and 2.</span> 3 plus 2 equals 5.
+        <br/>
+        Intent of <b>bad coherence</b>: <span style="color:red;">I will first compute the sum of 3 and 2.</span> 3 minus 2 equals 1.
+        <br/>
+        Intent of <b>good effectiveness</b>: <span style="color:red;">The question is asking the value of 3 - (6 - 9), I will compute (6 - 9) first.</span> 6 minus 9 equals -3.
+        <br/>
+        Intent of <b>bad effectiveness</b>: <span style="color:red;">The question is asking the value of 3 - (6 - 9), I will compute (3 - 6) first.</span> 3 minus 6 equals -3.
+      </p>
+
+      <!-- <p>Thanks again for your participation and your work!</p> -->
+    </div>
+
+    <div class="progress-container">
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <div class="container">
+      <crowd-form class="section crowd-form">
+        <div class="form-container">
+          <hr/>
+          <div>
+            <h5>Please take a moment to carefully read the instructions above. Response choices will appear after 15 seconds.</h5>
+          </div>
+          <hr/>
+          <div id="evaluation-container" style="visibility: hidden;">
+          </div>
+        </div>
+
+        <div class="navigation-buttons">
+          <!-- <button id="prev-btn" type="button" disabled>Previous</button> &nbsp &nbsp -->
+          <button id="next-btn" type="button" disabled>Next</button>
+        </div>
+        <crowd-button id="crowd-button" form-action="submit" disabled=true style="background-color: green;">
+          Submit
+        </crowd-button>
+      </crowd-form>
+    </div>
+    <div class="validation-message" id="validation-message" style="display: none;">
+      Please complete all associated questions to proceed.
+    </div>
+  </div>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="https://assets.crowd.aws/crowd-html-elements.js"></script>
+  <script>
+    $(function() {
+      var data_list = [
+        [
+          "{{ task.row_data['task_name-0'] }}", "{{ task.row_data['question-0'] }}", "{{ task.row_data['options-0'] }}",
+          "{{ task.row_data['reference-0'] }}", "{{ task.row_data['reasoning-0'] }}", "{{ task.row_data['pred_final-0'] }}"
+        ],
+        [
+          "{{ task.row_data['task_name-1'] }}", "{{ task.row_data['question-1'] }}", "{{ task.row_data['options-1'] }}",
+          "{{ task.row_data['reference-1'] }}", "{{ task.row_data['reasoning-1'] }}", "{{ task.row_data['pred_final-1'] }}"
+        ],
+        [
+          "{{ task.row_data['task_name-2'] }}", "{{ task.row_data['question-2'] }}", "{{ task.row_data['options-2'] }}",
+          "{{ task.row_data['reference-2'] }}", "{{ task.row_data['reasoning-2'] }}", "{{ task.row_data['pred_final-2'] }}"
+        ],
+        [
+          "{{ task.row_data['task_name-3'] }}", "{{ task.row_data['question-3'] }}", "{{ task.row_data['options-3'] }}",
+          "{{ task.row_data['reference-3'] }}", "{{ task.row_data['reasoning-3'] }}", "{{ task.row_data['pred_final-3'] }}"
+        ],
+        [
+          "{{ task.row_data['task_name-4'] }}", "{{ task.row_data['question-4'] }}", "{{ task.row_data['options-4'] }}",
+          "{{ task.row_data['reference-4'] }}", "{{ task.row_data['reasoning-4'] }}", "{{ task.row_data['pred_final-4'] }}"
+        ],
+        [
+          "{{ task.row_data['task_name-5'] }}", "{{ task.row_data['question-5'] }}", "{{ task.row_data['options-5'] }}",
+          "{{ task.row_data['reference-5'] }}", "{{ task.row_data['reasoning-5'] }}", "{{ task.row_data['pred_final-5'] }}"
+        ]
+      ];
+      var num_data_total = data_list.length;
+
+      var cur_item_idx = 0;
+      var evaluation_html = "";
+      data_list.forEach(function(data_item, index) {
+        // var cur_task_name = data_item[0]
+        var cur_question = data_item[1]
+        var cur_options = data_item[2]
+        var cur_reference = data_item[3]
+        var cur_reasoning = data_item[4]
+        var cur_pred_final = data_item[5]
+        evaluation_html += `
+        <div id="evaluation-block-` + index + `" class="evaluation-block" style="display: none;">
+          <!-- <div class="task-heading">Intent Evaluation Task</div> -->
+          <table class="evaluation-table" id="context-table">
+            <tr>
+              <th><span style="color:blue;">Question and Correct Answer</span></th>
+            </tr>
+            <tr>
+              <td><em><span style="color:purple;">Note: You do NOT need to answer this question.</span></em><br/><br/><b>Question:</b> ` + cur_question + `<br/>` + cur_options + `<br/><br/><b>Correct Answer:</b> ` + cur_reference + `</td>
+            </tr>
+            <tr>
+              <th><span style="color:blue;">User's Analysis and Answer</span> (<span style="color:red;">intents in red</span>; reasoning in black)</th>
+            </tr>
+            <tr>
+              <td>` + cur_reasoning + `<br/><b>Final Answer:</b> ` + cur_pred_final + `</td>
+            </tr>
+          </table>
+
+          <table class="evaluation-table" id="evaluation-table">
+            <tr>
+              <th><span style="color:blue;">Criteria</span></th>
+              <th><span style="color:blue;">Evaluation</span></th>
+            </tr>
+            <tr class="evaluation-row">
+              <td>
+                <div>
+                  <p>
+                    <b>1. Coherence</b>: In general, does the user's analysis align coherently with the <span style="color:red;">intent statements</span>?
+                    <br/>
+                    <b>2. Effectiveness</b>: Overall, do the <span style="color:red;">intent statements</span> help with the planning and reasoning for answering the question?
+                    <br/>
+                    <b>3. Interpretability</b>: Do you think providing the <span style="color:red;">intent</span> can help you better understand the reasoning process than not providing it?
+                  </p>
+                </div>
+              </td>
+              <td>
+                <div class="radio-group-container">
+                  <label><b>Coherence</b></label><br>
+                  <input type="radio" name="coherence` + index + `" value="good" required> Good &nbsp
+                  <input type="radio" name="coherence` + index + `" value="ok"> OK &nbsp
+                  <input type="radio" name="coherence` + index + `" value="bad"> Bad
+                </div>
+                <div class="radio-group-container">
+                  <label><b>Effectiveness</b></label><br>
+                  <input type="radio" name="effectiveness` + index + `" value="good" required> Good &nbsp
+                  <input type="radio" name="effectiveness` + index + `" value="ok"> OK &nbsp
+                  <input type="radio" name="effectiveness` + index + `" value="bad"> Bad
+                </div>
+                <div class="radio-group-container">
+                  <label><b>Interpretability</b></label><br>
+                  <input type="radio" name="interpretability` + index + `" value="good" required> Yes &nbsp
+                  <input type="radio" name="interpretability` + index + `" value="ok"> Somewhat &nbsp
+                  <input type="radio" name="interpretability` + index + `" value="bad"> No
+                </div>
+              </td>
+            </tr>
+          </table>
+        </div>`;
+      });
+      $("#evaluation-container").html(evaluation_html);
+
+      function showEvaluation(index) {
+        $(".evaluation-block").hide();
+        $("#prev-btn").prop("disabled", true);
+        // if (index === 0) {
+        //   $("#prev-btn").prop("disabled", true);
+        // } else {
+        //   $("#prev-btn").prop("disabled", false);
+        // }
+        $("#next-btn").prop("disabled", true);
+        // if (index === num_data_total - 1) {
+        //   $("#next-btn").prop("disabled", true);
+        // } else {
+        //   $("#next-btn").prop("disabled", false);
+        // }
+        $(`#evaluation-block-` + index).show();
+        updateProgressBar();
+        // globalThis.scrollTo({top: 0, left: 0, behavior: "smooth"});
+      }
+
+      function updateProgressBar() {
+        var current = cur_item_idx + 1;
+        var percentage = (current / num_data_total) * 100;
+        $("#progress-bar").css("width", percentage + "%");
+      }
+
+      showEvaluation(cur_item_idx);
+      updateProgressBar();
+
+      function validateCurrentStep() {
+        var valid = true;
+        if (!$(`input[name="coherence` + cur_item_idx + `"]:checked`).val()) {
+          valid = false;
+        }
+        if (!$(`input[name="effectiveness` + cur_item_idx + `"]:checked`).val()) {
+          valid = false;
+        }
+        if (!$(`input[name="interpretability` + cur_item_idx + `"]:checked`).val()) {
+          valid = false;
+        }
+        return valid;
+      }
+
+      $("#evaluation-container").on("input", 'input[type="text"], input[type="radio"]', function () {
+        if (validateCurrentStep()) {
+          if (cur_item_idx === num_data_total - 1) {
+            $("#crowd-button").prop("disabled", false);
+          } else {
+            $("#next-btn").prop("disabled", false);
+          }
+          if (cur_item_idx === 0) {
+            $("#prev-btn").prop("disabled", true);
+          } else {
+            $("#prev-btn").prop("disabled", false);
+          }
+        } else {
+          $("#crowd-button").prop("disabled", true);
+          $("#next-btn").prop("disabled", true);
+          $("#prev-btn").prop("disabled", true);
+        }
+      });
+
+      $("#next-btn").on("click", function () {
+        if (!validateCurrentStep()) {
+          $("#validation-message").show();
+          return;
+        } else {
+          $("#validation-message").hide();
+        }
+        if (cur_item_idx !== num_data_total - 2) {
+          $("#prev-btn").prop("disabled", true);
+          $(".character-checkbox").prop("checked", false);
+        } else {
+          $("#next-btn").prop("disabled", true);
+        }
+        if (cur_item_idx < num_data_total - 1) {
+          cur_item_idx++;
+          showEvaluation(cur_item_idx);
+        }
+        // globalThis.scrollTo({top: 0, left: 0, behavior: "smooth"});
+      });
+
+      $("#prev-btn").on("click", function () {
+        if (cur_item_idx !== 1) {
+            $("#next-btn").prop("disabled", false);
+        } else {
+            $("#prev-btn").prop("disabled", true);
+        }
+        $("#crowd-button").prop("disabled", true)
+        if (cur_item_idx > 0) {
+          cur_item_idx--;
+          showEvaluation(cur_item_idx);
+        }
+        // globalThis.scrollTo({top: 0, left: 0, behavior: "smooth"});
+      });
+
+      var time = 15000, delta = 100, tid;
+      // var time = 1000, delta = 100, tid;
+
+      tid = setInterval(function() {
+        if ( document.hidden ) { return; }    
+        time -= delta;
+        if ( time <= 0 ) {
+          clearInterval(tid);
+          document.getElementById("evaluation-container").style.visibility = "visible";
+        }        
+      }, delta);
+    });
+  </script>
+
+</body>
+
+</html>
