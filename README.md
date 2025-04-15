@@ -64,7 +64,7 @@ export HF_HOME="/path/to/your/.cache/huggingface/datasets"  # Default: "${HOME}/
 
 </details>
 
-## Datasets and Models (Paper Section XX)
+## Datasets and Models
 
 - Download the datasets and models beforehand if the computing nodes have no Internet access or HOME storage is limited.
 - Please ensure `CACHE_DIR` and `HF_TOKEN` in the script are correct directories.
@@ -87,7 +87,7 @@ HF_TOKEN="YOUR_HF_TOKEN"  # https://huggingface.co/settings/tokens
 bash run_download_models.sh "${CACHE_DIR}" "${HF_TOKEN}"  # Download models to "${CACHE_DIR}/"
 ```
 
-## Main Experiments on Mathematical Reasoning (Paper Section XX)
+## Main Experiments on Mathematical Reasoning (Paper Section 4)
 
 For each bash script, please ensure `CACHE_DIR` and `PROJECT_DIR` in the script are 
 correct Hugging Face cache directory (default: `"~/.cache/huggingface/"`) and 
@@ -98,7 +98,7 @@ mkdir -p logs/  # where we save running logs
 mkdir -p results/  # where we save experimental results
 ```
 
-### Mathematical Reasoning (Paper Table XX)
+### Mathematical Reasoning (Paper Table 3)
 
 <details><summary>Experimental Settings</summary>
 
@@ -159,9 +159,9 @@ bash run_eval_lm.sh "1;${MODEL};1;MATH_ALL;ALL;${GEN_TEMP}" "${CACHE_DIR}" "${PR
 </details>
 
 
-## Generalizability of Speaking with Intent (Paper Section XX)
+## Generalizability of Speaking with Intent (Paper Section 5)
 
-### Multiple-Choice QA (Paper Table XX)
+### Multiple-Choice QA (Paper Table 5)
 
 <details><summary>Experimental Settings</summary>
 
@@ -206,7 +206,7 @@ bash run_eval_lm.sh "1;${MODEL};1;QA_ALL;ALL;${GEN_TEMP}" "${CACHE_DIR}" "${PROJ
 
 </details>
 
-### Text Summarization (Paper Table XX)
+### Text Summarization (Paper Table 7)
 
 <details><summary>Experimental Settings</summary>
 
@@ -249,7 +249,7 @@ bash run_eval_lm.sh "1;${MODEL};1;SUM_ALL;ALL;${GEN_TEMP}" "${CACHE_DIR}" "${PRO
 
 </details>
 
-### Fact Checking of Summaries (Paper Table XX)
+### Fact Checking of Summaries (Paper Table 8)
 
 <details><summary>Experimental Settings</summary>
 
@@ -286,7 +286,7 @@ bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;${GEN_TEMP};${EVAL_NUM}" "${CACHE_DIR
 
 </details>
 
-## Human Evaluation of The Generated Intent (Paper Section XX)
+## Human Evaluation of The Generated Intent (Paper Section 6)
 
 <details><summary>Preparing Data for Human Evaluation</summary>
 
