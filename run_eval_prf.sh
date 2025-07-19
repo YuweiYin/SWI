@@ -78,13 +78,7 @@ echo -e "PROJECT_DIR: ${PROJECT_DIR}"
 echo -e "OUTPUT_DIR: ${OUTPUT_DIR}"
 
 if [[ ${EVAL_TASKS} == "SUM_ALL" ]]; then
-  EVAL_TASK_NAME="cnn_dailymail,xsum,xlsum,samsum,dialogsum,wiki_lingua"
-elif [[ ${EVAL_TASKS} == "SUM_LARGE" ]]; then
-  # Num Items: CDM = 11,490; XSum = 11,334; XL-Sum = 11,535
-  EVAL_TASK_NAME="cnn_dailymail,xsum,xlsum"
-elif [[ ${EVAL_TASKS} == "SUM_SMALL" ]]; then
-  # Num Items: SAMSum = 819; DialogSum = 1,500; WikiLingua = 3,000
-  EVAL_TASK_NAME="samsum,dialogsum,wiki_lingua"
+  EVAL_TASK_NAME="cnn_dailymail,xsum,xlsum,dialogsum,wiki_lingua"
 else
   EVAL_TASK_NAME="${EVAL_TASKS}"
 fi

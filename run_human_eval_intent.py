@@ -17,31 +17,22 @@ import pandas as pd
 
 from datasets import Dataset
 
-# Mathematical Reasoning (Math)
-from tasks.gsm8k import EvalTaskGSM8K
-from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-from tasks.math500 import EvalTaskMATH500
-from tasks.amc23 import EvalTaskAMC23
-from tasks.aime24 import EvalTaskAIME24
-from tasks.aime25 import EvalTaskAIME25
-
-# Multiple-choice Question Answering (MCQA)
-from tasks.logiqa import EvalTaskLogiQA
-from tasks.commonsense_qa import EvalTaskCommonsenseQA
-from tasks.social_iqa import EvalTaskSocialIQA
-from tasks.openbookqa import EvalTaskOpenbookQA
-from tasks.ai2_arc import EvalTaskAi2Arc
-from tasks.bbh import EvalTaskBbh
-from tasks.mmlu import EvalTaskMmlu
-from tasks.mmlu_pro import EvalTaskMmluPro
-
 # Text Summarization (Sum)
 from tasks.cnn_dailymail import EvalTaskCnnDailymail
 from tasks.xsum import EvalTaskXSum
 from tasks.xlsum import EvalTaskXlSum
-from tasks.samsum import EvalTaskSamSum
 from tasks.dialogsum import EvalTaskDialogSum
 from tasks.wiki_lingua import EvalTaskWikiLingua
+
+# Multi-task Multiple-choice Question Answering (QA)
+from tasks.bbh import EvalTaskBbh
+from tasks.mmlu import EvalTaskMmlu
+from tasks.mmlu_pro import EvalTaskMmluPro
+
+# Mathematical Reasoning (Math)
+from tasks.gsm8k import EvalTaskGSM8K
+from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
+from tasks.math500 import EvalTaskMATH500
 
 from utils.init_functions import logger_setup, cuda_setup, random_setup
 
@@ -103,33 +94,24 @@ class HumanEvalIntent:
         assert os.path.isdir(self.model_path), f"AssertionError: assert os.path.isdir({self.model_path})"
 
         self.task_class_dict = {
-            # Mathematical Reasoning (Math)
-            "gsm8k": EvalTaskGSM8K,
-            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
-            "math500": EvalTaskMATH500,
-            "amc23": EvalTaskAMC23,
-            "aime24": EvalTaskAIME24,
-            "aime25": EvalTaskAIME25,
-            # Multiple-choice Science Question Answering (MCQA)
-            "logiqa": EvalTaskLogiQA,
-            "commonsense_qa": EvalTaskCommonsenseQA,
-            "social_iqa": EvalTaskSocialIQA,
-            "openbookqa": EvalTaskOpenbookQA,
-            "ai2_arc": EvalTaskAi2Arc,
-            "bbh": EvalTaskBbh,
-            "mmlu": EvalTaskMmlu,
-            "mmlu_pro": EvalTaskMmluPro,
             # Text Summarization (Sum)
             "cnn_dailymail": EvalTaskCnnDailymail,
             "xsum": EvalTaskXSum,
             "xlsum": EvalTaskXlSum,
-            "samsum": EvalTaskSamSum,
             "dialogsum": EvalTaskDialogSum,
             "wiki_lingua": EvalTaskWikiLingua,
+            # Multi-task Multiple-choice Question Answering (QA)
+            "bbh": EvalTaskBbh,
+            "mmlu": EvalTaskMmlu,
+            "mmlu_pro": EvalTaskMmluPro,
+            # Mathematical Reasoning (Math)
+            "gsm8k": EvalTaskGSM8K,
+            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
+            "math500": EvalTaskMATH500,
         }
-        self.math_set = {"gsm8k", "gsm8k_platinum", "math500", "amc23", "aime24", "aime25"}
-        self.mcqa_set = {"logiqa", "commonsense_qa", "social_iqa", "openbookqa", "ai2_arc", "bbh", "mmlu", "mmlu_pro"}
-        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "samsum", "dialogsum", "wiki_lingua"}
+        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua"}
+        self.math_set = {"gsm8k", "gsm8k_platinum", "math500"}
+        self.mcqa_set = {"bbh", "mmlu", "mmlu_pro"}
 
         self.punc_list = [ch for ch in string.punctuation]
         self.space_list = [ch for ch in string.whitespace]
@@ -252,6 +234,7 @@ class HumanEvalIntent:
             logger=self.logger,
             cache_dir=self.cache_dir,
             project_dir=self.project_dir,
+            # add_def=True,
         )
 
         self.logger.info(f">>> Evaluation Task: {eval_task_name}")
@@ -590,9 +573,6 @@ def main(
 ) -> None:
     """
     Convert the result JSON files to CSV for Human evaluation.
-    MATH_ALL: "gsm8k,math500"
-    QA_ALL: "bbh,mmlu"
-    SUM_ALL: "cnn_dailymail,xsum"
 
     :param task: 1. language model evaluation.
     :param eval_task_name: The name(s) of the evaluation task. (e.g., "xsum", "xlsum", and "gsm8k,math500")
@@ -630,18 +610,12 @@ def main(
     else:
         cache_dir = None
 
-    if eval_task_name == "MATH_ALL":
-        eval_task_names = ["gsm8k", "math500"]
-    elif eval_task_name == "QA_ALL":
-        eval_task_names = ["ai2_arc", "bbh", "mmlu", "mmlu_pro"]
-    elif eval_task_name == "SUM_ALL":
-        eval_task_names = ["cnn_dailymail", "xsum", "xlsum", "samsum", "dialogsum", "wiki_lingua"]
-    elif eval_task_name == "MATH_TWO":
-        eval_task_names = ["gsm8k", "math500"]
+    if eval_task_name == "SUM_TWO":
+        eval_task_names = ["cnn_dailymail", "xsum"]
     elif eval_task_name == "QA_TWO":
         eval_task_names = ["bbh", "mmlu"]
-    elif eval_task_name == "SUM_TWO":
-        eval_task_names = ["cnn_dailymail", "xsum"]
+    elif eval_task_name == "MATH_TWO":
+        eval_task_names = ["gsm8k", "math500"]
     else:
         eval_task_names = [eval_task_name]
 
@@ -657,6 +631,7 @@ def main(
         debug=debug,
         output_dir=output_dir,
         num_item_per_task=num_item_per_task,
+        # num_duplication=num_duplication,
         min_doc_length=min_doc_length,
         max_doc_length=max_doc_length,
     )

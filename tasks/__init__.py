@@ -52,9 +52,9 @@ class EvalTaskManager:
         self.task_info = None
 
         self.all_tasks = {
-            "gsm8k", "gsm8k_platinum", "math500", "amc23", "aime24", "aime25",  # Mathematical Reasoning
-            "logiqa", "commonsense_qa", "social_iqa", "openbookqa", "ai2_arc", "bbh", "mmlu", "mmlu_pro",  # MCQA
-            "cnn_dailymail", "xsum", "xlsum", "samsum", "dialogsum", "wiki_lingua",  # Summarization
+            "cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua",  # Summarization
+            "bbh", "mmlu", "mmlu_pro",  # QA
+            "gsm8k", "gsm8k_platinum", "math500",  # Mathematical Reasoning
         }
 
     def load_task(
@@ -72,6 +72,7 @@ class EvalTaskManager:
         }
         for hf_ds in hf_ds_list:
             assert isinstance(hf_ds, list) and len(hf_ds) == 3
+            # self.logger.info(f">>> [dataset: {hf_ds[0]} --- {hf_ds[1]}]")
             try:  # Load the subset
                 cur_ds = load_dataset(
                     hf_ds[0],
@@ -79,6 +80,15 @@ class EvalTaskManager:
                     cache_dir=os.path.join(self.cache_dir, "datasets"),
                     trust_remote_code=True,
                 )
+                # ds_dict = {
+                #     "hf_dataset": hf_ds[0],
+                #     "hf_subset": hf_ds[1],
+                #     # "train": cur_ds["train"] if "train" in cur_ds else None,
+                #     "train": None,
+                #     # "train": cur_ds["train"][:100] if "train" in cur_ds else None,
+                #     "validation": cur_ds["validation"] if "validation" in cur_ds else None,
+                #     "test": cur_ds["test"] if "test" in cur_ds else None,
+                # }
                 eval_split = hf_ds[2]
                 assert eval_split in cur_ds
                 ds_dict = {
@@ -175,8 +185,14 @@ class EvalTaskManager:
             truncation_side="left",  # "right" for training, "left" for generating
             cache_dir=cache_dir,
         )
+        # tokenizer.add_special_tokens({"pad_token": "<|pad_of_text|>"})
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
+        # terminators_gen = [
+        #     tokenizer.eos_token_id,
+        #     # tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        #     tokenizer.convert_tokens_to_ids(tokenizer.eos_token)
+        # ]
 
         max_len = tokenizer.max_len_single_sentence
         if self.verbose:
@@ -285,43 +301,34 @@ def main(
     if isinstance(kwargs, dict):
         logger.info(f">>> Unused parameters in kwargs: {kwargs}\n")
 
-    # Mathematical Reasoning (Math)
-    from tasks.gsm8k import EvalTaskGSM8K
-    from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-    from tasks.math500 import EvalTaskMATH500
-    from tasks.amc23 import EvalTaskAMC23
-    from tasks.aime24 import EvalTaskAIME24
-    from tasks.aime25 import EvalTaskAIME25
-
-    # Multiple-choice Question Answering (MCQA)
-    from tasks.logiqa import EvalTaskLogiQA
-    from tasks.commonsense_qa import EvalTaskCommonsenseQA
-    from tasks.social_iqa import EvalTaskSocialIQA
-    from tasks.openbookqa import EvalTaskOpenbookQA
-    from tasks.ai2_arc import EvalTaskAi2Arc
-    from tasks.bbh import EvalTaskBbh
-    from tasks.mmlu import EvalTaskMmlu
-    from tasks.mmlu_pro import EvalTaskMmluPro
-
     # Text Summarization (Sum)
     from tasks.cnn_dailymail import EvalTaskCnnDailymail
     from tasks.xsum import EvalTaskXSum
     from tasks.xlsum import EvalTaskXlSum
-    from tasks.samsum import EvalTaskSamSum
     from tasks.dialogsum import EvalTaskDialogSum
     from tasks.wiki_lingua import EvalTaskWikiLingua
 
+    # Multi-task Multiple-choice Question Answering (QA)
+    from tasks.bbh import EvalTaskBbh
+    from tasks.mmlu import EvalTaskMmlu
+    from tasks.mmlu_pro import EvalTaskMmluPro
+
+    # Mathematical Reasoning (Math)
+    from tasks.gsm8k import EvalTaskGSM8K
+    from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
+    from tasks.math500 import EvalTaskMATH500
+
     # Token length statistics
-    all_math = [EvalTaskGSM8K, EvalTaskGSM8KPlatinum, EvalTaskMATH500, EvalTaskAMC23, EvalTaskAIME24, EvalTaskAIME25]
-    all_qa = [EvalTaskLogiQA, EvalTaskCommonsenseQA, EvalTaskSocialIQA, EvalTaskOpenbookQA,
-              EvalTaskAi2Arc, EvalTaskBbh, EvalTaskMmlu, EvalTaskMmluPro]
-    all_sum = [EvalTaskCnnDailymail, EvalTaskXSum, EvalTaskXlSum, EvalTaskSamSum, EvalTaskDialogSum, EvalTaskWikiLingua]
-    for eval_class in all_qa + all_math + all_sum:
+    all_sum = [EvalTaskCnnDailymail, EvalTaskXSum, EvalTaskXlSum, EvalTaskDialogSum, EvalTaskWikiLingua]
+    all_qa = [EvalTaskBbh, EvalTaskMmlu, EvalTaskMmluPro]
+    all_math = [EvalTaskGSM8K, EvalTaskGSM8KPlatinum, EvalTaskMATH500]
+    for eval_class in all_sum + all_qa + all_math:
         eval_tasks = eval_class(
             verbose=verbose,
             logger=logger,
             cache_dir=cache_dir,
             project_dir=project_dir,
+            # add_def=True,
         )
         eval_tasks.token_stat(eval_task_obj=eval_tasks, cache_dir=cache_dir, hf_id=hf_id, use_swi=False)
         eval_tasks.token_stat(eval_task_obj=eval_tasks, cache_dir=cache_dir, hf_id=hf_id, use_swi=True)

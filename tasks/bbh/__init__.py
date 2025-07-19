@@ -21,6 +21,7 @@ class EvalTaskBbh(EvalTaskManager):
             logger,
             cache_dir: Optional[str] = None,
             project_dir: Optional[str] = None,
+            **kwargs,
     ):
         super().__init__(verbose, logger, cache_dir, project_dir)
 
@@ -29,7 +30,7 @@ class EvalTaskBbh(EvalTaskManager):
         # Features: ["input", "target"]
         # Eval: test set
         # >>> [use_swi = False] >>> #Sub-Tasks = 23; #Total Ins. = 5511; avg_len_token: 202.500; std_len_token: 73.391
-        # >>> [use_swi = True] >>> #Sub-Tasks = 23; #Total Ins. = 5511; avg_len_token: 287.500; std_len_token: 73.391
+        # >>> [use_swi = True] >>> #Sub-Tasks = 23; #Total Ins. = 5511; avg_len_token: 347.500; std_len_token: 73.391
 
         self.task_name = "bbh"
         self.task_info = {
@@ -70,6 +71,12 @@ class EvalTaskBbh(EvalTaskManager):
         with open(self.options_fp, "r", encoding="utf-8") as fp_in:
             self.options = json.load(fp_in)
 
+        add_def = "add_def" in kwargs and kwargs["add_def"]
+        intent_def = """
+The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
+Some synonyms of intent are intention, purpose, aim, goal, and objective.
+        """.strip()
+
         self.system_prompt_raw = f"""
 You are a helpful assistant. \
 You are good at answering questions and logical reasoning. \
@@ -83,10 +90,14 @@ For multiple-choice questions, you need to select one from the given options.
 Your final answer must start with "Final Answer:"
 During generation, follow all the requirements below:
 1. Always explicitly state your own intent before speaking each sentence.
-2. Each intent statement should explain the sentence followed up.
-3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag.
+2. Each intent statement should explain the sentence that follows.
+3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag. \
+The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final answer starting with "Final Answer:"
         """.strip()
+
+        if add_def:
+            self.system_prompt_swi = intent_def + "\n\n" + self.system_prompt_swi
 
     def load_task(
             self,
@@ -166,7 +177,6 @@ During generation, follow all the requirements below:
     ) -> Dict[str, Any]:
         assert isinstance(self.task_name, str) and self.task_name in self.all_tasks
         use_cot = "use_cot" in kwargs and kwargs["use_cot"]
-        use_arr = "use_arr" in kwargs and kwargs["use_arr"]
         use_ps = "use_ps" in kwargs and kwargs["use_ps"]
 
         # Load data
@@ -222,11 +232,6 @@ Answer the following question.\n
         if use_cot:  # Zero-shot Chain-of-Thought (CoT) prompting  https://arxiv.org/abs/2205.11916
             dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
 Let's think step by step.
-            """.strip()
-        elif use_arr:  # ARR: Analyzing, Retrieving, and Reasoning  https://arxiv.org/abs/2502.04689
-            dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
-Let's analyze the intent of the question, find relevant information, \
-and answer the question with step-by-step reasoning.
             """.strip()
         elif use_ps:  # Plan-and-Solve prompting  https://aclanthology.org/2023.acl-long.147/
             dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""

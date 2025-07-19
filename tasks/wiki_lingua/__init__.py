@@ -16,6 +16,7 @@ class EvalTaskWikiLingua(EvalTaskManager):
             logger,
             cache_dir: Optional[str] = None,
             project_dir: Optional[str] = None,
+            **kwargs,
     ):
         super().__init__(verbose, logger, cache_dir, project_dir)
 
@@ -24,7 +25,7 @@ class EvalTaskWikiLingua(EvalTaskManager):
         # Features: ["gem_id", "gem_parent_id", "source_language", "target_language", "source", "target", "references"]
         # Eval: sampled_test set
         # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 3000; avg_len_token: 524.621; std_len_token: 274.830
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 3000; avg_len_token: 607.621; std_len_token: 274.830
+        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 3000; avg_len_token: 667.621; std_len_token: 274.830
 
         self.task_name = "wiki_lingua"
         self.task_info = {
@@ -33,19 +34,65 @@ class EvalTaskWikiLingua(EvalTaskManager):
             ],
         }
 
-        self.system_prompt_raw = f"""
+        add_def = "add_def" in kwargs and kwargs["add_def"]
+        intent_def = """
+The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
+Some synonyms of intent are intention, purpose, aim, goal, and objective.
+        """.strip()
+
+        self.system_prompt_raw = """
 You are a helpful assistant. \
 You are good at summarizing documents and the summary must start with "Final Summary:"
         """.strip()
-        self.system_prompt_swi = f"""
+        self.system_prompt_swi = """
 You are a helpful assistant who speaks with intent. \
 You are good at summarizing documents and the summary must start with "Final Summary:"
 During generation, follow all the requirements below:
 1. Always explicitly state your own intent before speaking each sentence.
-2. Each intent statement should explain the sentence followed up.
-3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag.
+2. Each intent statement should explain the sentence that follows.
+3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag. \
+The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final summary starting with "Final Summary:"
         """.strip()
+
+        # SWI prompt variants
+        self.system_prompt_swi_v1 = """
+You are a purposeful assistant skilled in document summarization who speaks with intent. \
+Your final response must begin with "Final Summary:"
+While generating responses, adhere strictly to these instructions:
+1. Before every sentence, clearly state your intent using an explanation.
+2. Each intention should directly clarify the sentence that follows.
+3. Use the tags "<INTENT>" and "</INTENT>" to wrap each intent statement. \
+Each statement inside the intent tags must begin with "To" and a verb, for example, "To describe the process."
+4. Conclude with a clear and concise final summary that begins with "Final Summary:"
+        """.strip()
+        self.system_prompt_swi_v2 = """
+You are a helpful assistant who is skilled in text summarization and always communicates with deliberate intent. \
+Ensure your final output starts with "Final Summary:"
+Comply with the following instructions during your response:
+1. Begin each sentence with a description of your intent.
+2. The intent must directly relate to and explain the sentence that comes after it.
+3. Surround each intent with the tags "<INTENT>" and "</INTENT>". \
+Each intent statement enclosed by the tags should start with the word "To" and an action verb, \
+like "To explain the reasoning."
+4. Finish with a succinct summary, introduced by "Final Summary:"
+        """.strip()
+        self.system_prompt_swi_v3 = """
+You are a precise and helpful assistant proficient in text summarization, who always speaks with deliberate intent. \
+Your final response must begin with "Final Summary:"
+While producing your response, follow these guidelines:
+1. Before each sentence, declare your intent explicitly.
+2. Ensure each intent explains the sentence that immediately follows.
+3. Wrap every intent declaration with "<INTENT>" and "</INTENT>" tags. \
+Make sure that every intent statement within the tags begins with "To" and an action verb, \
+for example, "To justify the choice."
+4. Conclude your response with a clearly stated final summary prefaced by "Final Summary:"
+        """.strip()
+
+        self.system_prompt_swi_all = [
+            self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
+        if add_def:
+            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -56,6 +103,14 @@ During generation, follow all the requirements below:
             **kwargs
     ) -> Dict[str, Any]:
         assert isinstance(self.task_name, str) and self.task_name in self.all_tasks
+        use_cot = "use_cot" in kwargs and kwargs["use_cot"]
+        use_ps = "use_ps" in kwargs and kwargs["use_ps"]
+
+        if "swi_version" in kwargs and isinstance(kwargs["swi_version"], int):
+            system_prompt_swi_idx = kwargs["swi_version"]
+        else:
+            system_prompt_swi_idx = 0
+        assert 0 <= system_prompt_swi_idx < len(self.system_prompt_swi_all)
 
         # Load data
         hf_ds_list = self.task_info["hf_dataset"]
@@ -63,7 +118,7 @@ During generation, follow all the requirements below:
 
         dialog_sys = []
         if use_swi:
-            dialog_sys.append({"role": "system", "content": self.system_prompt_swi})
+            dialog_sys.append({"role": "system", "content": self.system_prompt_swi_all[system_prompt_swi_idx]})
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
@@ -90,6 +145,21 @@ Speak with intent and summarize the following article.\n
 Summarize the following article.\n
 {article}
             """.strip()}]
+
+        # Answer Trigger Prompting methods
+        if use_cot:  # Zero-shot Chain-of-Thought (CoT) prompting  https://arxiv.org/abs/2205.11916
+            dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
+Let's think step by step.
+            """.strip()
+        elif use_ps:  # Plan-and-Solve (PS) prompting  https://aclanthology.org/2023.acl-long.147/
+            # RAW: Let's first understand the problem and devise a plan to solve the problem. \
+            # Then, let's carry out the plan and solve the problem step by step.
+            dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
+Let's first understand the article and devise a plan to solve the task. \
+Then, let's carry out the plan and summarize the article step by step.
+            """.strip()
+        else:  # No extra prompts
+            pass
 
         dialog = dialog_sys + dialog_user
         # prompt = self.tokenizer.apply_chat_template(

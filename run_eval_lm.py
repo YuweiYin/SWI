@@ -24,31 +24,22 @@ import evaluate
 from datasets.download.download_config import DownloadConfig
 from evaluate_metrics.sentence_transformers import SentenceTransformer
 
-# Mathematical Reasoning (Math)
-from tasks.gsm8k import EvalTaskGSM8K
-from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-from tasks.math500 import EvalTaskMATH500
-from tasks.amc23 import EvalTaskAMC23
-from tasks.aime24 import EvalTaskAIME24
-from tasks.aime25 import EvalTaskAIME25
-
-# Multiple-choice Question Answering (MCQA)
-from tasks.logiqa import EvalTaskLogiQA
-from tasks.commonsense_qa import EvalTaskCommonsenseQA
-from tasks.social_iqa import EvalTaskSocialIQA
-from tasks.openbookqa import EvalTaskOpenbookQA
-from tasks.ai2_arc import EvalTaskAi2Arc
-from tasks.bbh import EvalTaskBbh
-from tasks.mmlu import EvalTaskMmlu
-from tasks.mmlu_pro import EvalTaskMmluPro
-
 # Text Summarization (Sum)
 from tasks.cnn_dailymail import EvalTaskCnnDailymail
 from tasks.xsum import EvalTaskXSum
 from tasks.xlsum import EvalTaskXlSum
-from tasks.samsum import EvalTaskSamSum
 from tasks.dialogsum import EvalTaskDialogSum
 from tasks.wiki_lingua import EvalTaskWikiLingua
+
+# Multi-task Multiple-choice Question Answering (QA)
+from tasks.bbh import EvalTaskBbh
+from tasks.mmlu import EvalTaskMmlu
+from tasks.mmlu_pro import EvalTaskMmluPro
+
+# Mathematical Reasoning (Math)
+from tasks.gsm8k import EvalTaskGSM8K
+from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
+from tasks.math500 import EvalTaskMATH500
 
 from utils.init_functions import logger_setup, cuda_setup, random_setup
 
@@ -109,44 +100,39 @@ class LMEval:
         os.environ["HF_HOME"] = self.cache_dir
         self.model_path = os.path.join(
             self.cache_dir, "models--" + self.hf_name, "snapshots/model")
-        assert os.path.isdir(self.model_path), f"AssertionError: assert os.path.isdir({self.model_path})"
-
-        # Tokenizer and LLM model
-        self.tokenizer = self.load_tokenizer(model_path=self.model_path, padding_side="left", truncation_side="left")
-        self.terminators_gen = [
-            self.tokenizer.eos_token_id,
-            self.tokenizer.convert_tokens_to_ids(self.tokenizer.eos_token)
-        ]
-        self.model = None
 
         self.task_class_dict = {
-            # Mathematical Reasoning (Math)
-            "gsm8k": EvalTaskGSM8K,
-            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
-            "math500": EvalTaskMATH500,
-            "amc23": EvalTaskAMC23,
-            "aime24": EvalTaskAIME24,
-            "aime25": EvalTaskAIME25,
-            # Multiple-choice Question Answering (MCQA)
-            "logiqa": EvalTaskLogiQA,
-            "commonsense_qa": EvalTaskCommonsenseQA,
-            "social_iqa": EvalTaskSocialIQA,
-            "openbookqa": EvalTaskOpenbookQA,
-            "ai2_arc": EvalTaskAi2Arc,
-            "bbh": EvalTaskBbh,
-            "mmlu": EvalTaskMmlu,
-            "mmlu_pro": EvalTaskMmluPro,
             # Text Summarization (Sum)
             "cnn_dailymail": EvalTaskCnnDailymail,
             "xsum": EvalTaskXSum,
             "xlsum": EvalTaskXlSum,
-            "samsum": EvalTaskSamSum,
             "dialogsum": EvalTaskDialogSum,
             "wiki_lingua": EvalTaskWikiLingua,
+            # Multi-task Multiple-choice Question Answering (QA)
+            "bbh": EvalTaskBbh,
+            "mmlu": EvalTaskMmlu,
+            "mmlu_pro": EvalTaskMmluPro,
+            # Mathematical Reasoning (Math)
+            "gsm8k": EvalTaskGSM8K,
+            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
+            "math500": EvalTaskMATH500,
         }
-        self.math_set = {"gsm8k", "gsm8k_platinum", "math500", "amc23", "aime24", "aime25"}
-        self.mcqa_set = {"logiqa", "commonsense_qa", "social_iqa", "openbookqa", "ai2_arc", "bbh", "mmlu", "mmlu_pro"}
-        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "samsum", "dialogsum", "wiki_lingua"}
+        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua"}
+        self.math_set = {"gsm8k", "gsm8k_platinum", "math500"}
+        self.mcqa_set = {"bbh", "mmlu", "mmlu_pro"}
+
+        if self.eval_task_name in self.mcqa_set:
+            assert os.path.isdir(self.model_path), f"AssertionError: assert os.path.isdir({self.model_path})"
+            # Tokenizer and LLM model
+            self.tokenizer = self.load_tokenizer(model_path=self.model_path, padding_side="left", truncation_side="left")
+            self.terminators_gen = [
+                self.tokenizer.eos_token_id,
+                # self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+                self.tokenizer.convert_tokens_to_ids(self.tokenizer.eos_token)
+            ]
+        else:
+            self.tokenizer = None
+        self.model = None
 
         # Evaluators
         hf_eval_cache = os.path.join(self.cache_dir, "evaluate")
@@ -184,29 +170,20 @@ class LMEval:
         #   BERTScore always returns scores near 85%, and Sentence BERT always outputs 99%.
         #   Hence, we do not use BERTScore and Sentence BERT. Instead, we try LLM-as-a-Judge for semantic matching.
         self.task_eval_dict = {
-            # Mathematical Reasoning. Key metrics: "em"
-            "gsm8k": ("math", ["em"]),
-            "gsm8k_platinum": ("math", ["em"]),
-            "math500": ("math", ["em"]),
-            "amc23": ("math", ["em"]),
-            "aime24": ("math", ["em"]),
-            "aime25": ("math", ["em"]),
-            # Question Answering. Key metrics: "em" and "mcqa"
-            "logiqa": ("qa", ["em", "mcqa"]),
-            "commonsense_qa": ("qa", ["em", "mcqa"]),
-            "social_iqa": ("qa", ["em", "mcqa"]),
-            "openbookqa": ("qa", ["em", "mcqa"]),
-            "ai2_arc": ("qa", ["em", "mcqa"]),
-            "bbh": ("qa", ["em", "mcqa"]),
-            "mmlu": ("qa", ["em", "mcqa"]),
-            "mmlu_pro": ("qa", ["em", "mcqa"]),
             # Summarization. Key metrics: "rouge"
             "cnn_dailymail": ("sum", ["rouge"]),
             "xsum": ("sum", ["rouge"]),
             "xlsum": ("sum", ["rouge"]),
-            "samsum": ("sum", ["rouge"]),
             "dialogsum": ("sum", ["rouge"]),
             "wiki_lingua": ("sum", ["rouge"]),
+            # Question Answering. Key metrics: "em" and "mcqa"
+            "bbh": ("qa", ["em", "mcqa"]),
+            "mmlu": ("qa", ["em", "mcqa"]),
+            "mmlu_pro": ("qa", ["em", "mcqa"]),
+            # Mathematical Reasoning. Key metrics: "em"
+            "gsm8k": ("math", ["em"]),
+            "gsm8k_platinum": ("math", ["em"]),
+            "math500": ("math", ["em"]),
         }
 
         self.metric_func = {
@@ -1112,12 +1089,11 @@ def main(
         if verbose:
             logger.info(e)
 
-    if eval_task_name == "MATH_ALL":
-        eval_task_name = ["gsm8k", "gsm8k_platinum", "math500", "amc23", "aime24", "aime25"]
-    elif eval_task_name == "Competition":
-        eval_task_name = ["amc23", "aime24", "aime25"]
-    else:
-        eval_task_name = str(eval_task_name).strip()
+    from transformers import modeling_utils
+
+    if not hasattr(modeling_utils, "ALL_PARALLEL_STYLES") or modeling_utils.ALL_PARALLEL_STYLES is None:
+        logger.info(f">>> Manually fix potential issues about `modeling_utils.ALL_PARALLEL_STYLES`")
+        modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
 
     lm_eval = LMEval(
         verbose=verbose,

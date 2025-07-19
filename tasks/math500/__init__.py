@@ -16,6 +16,7 @@ class EvalTaskMATH500(EvalTaskManager):
             logger,
             cache_dir: Optional[str] = None,
             project_dir: Optional[str] = None,
+            **kwargs,
     ):
         super().__init__(verbose, logger, cache_dir, project_dir)
 
@@ -23,8 +24,8 @@ class EvalTaskMATH500(EvalTaskManager):
         # Train = 0, Valid = 0, Test = 500
         # Features: ["problem", "solution", "answer", "subject", "level", "unique_id"]
         # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 500; avg_len_token: 133.600; std_len_token: 73.067
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 500; avg_len_token: 218.600; std_len_token: 73.067
+        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 500; avg_len_token: 132.600; std_len_token: 73.067
+        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 500; avg_len_token: 277.600; std_len_token: 73.067
 
         self.task_name = "math500"
         self.task_info = {
@@ -40,19 +41,65 @@ class EvalTaskMATH500(EvalTaskManager):
             ],
         }
 
-        self.system_prompt_raw = r"""
+        add_def = "add_def" in kwargs and kwargs["add_def"]
+        intent_def = """
+The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
+Some synonyms of intent are intention, purpose, aim, goal, and objective.
+        """.strip()
+
+        self.system_prompt_raw = """
 You are a helpful assistant. \
 You are good at mathematical reasoning. Your final answer must start with "Final Answer:"
         """.strip()
-        self.system_prompt_swi = r"""
+        self.system_prompt_swi = """
 You are a helpful assistant who speaks with intent. \
 You are good at mathematical reasoning. Your final answer must start with "Final Answer:"
 During generation, follow all the requirements below:
 1. Always explicitly state your own intent before speaking each sentence.
-2. Each intent statement should explain the sentence followed up.
-3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag.
+2. Each intent statement should explain the sentence that follows.
+3. Your intent must start with the "<INTENT>" tag and end with the "</INTENT>" tag. \
+The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final answer starting with "Final Answer:"
         """.strip()
+
+        # SWI prompt variants
+        self.system_prompt_swi_v1 = """
+You are a purposeful assistant skilled in mathematical reasoning. \
+Your final response must begin with "Final Answer:"
+While generating responses, adhere strictly to these instructions:
+1. Before every sentence, clearly state your intent using an explanation.
+2. Each intention should directly clarify the sentence that follows.
+3. Use the tags "<INTENT>" and "</INTENT>" to wrap each intent statement. \
+Each statement inside the intent tags must begin with "To" and a verb, for example, "To describe the process."
+4. Conclude with a clear and concise final answer that begins with "Final Answer:"
+        """.strip()
+        self.system_prompt_swi_v2 = """
+You are a mathematically skilled assistant who communicates with deliberate intent. \
+Ensure your final output starts with "Final Answer:"
+Comply with the following instructions during your response:
+1. Begin each sentence with a description of your intent.
+2. The intent must directly relate to and explain the sentence that comes after it.
+3. Surround each intent with the tags "<INTENT>" and "</INTENT>". \
+Each intent statement enclosed by the tags should start with the word "To" and an action verb, \
+like "To explain the reasoning."
+4. Finish with a definitive answer, introduced by "Final Answer:"
+        """.strip()
+        self.system_prompt_swi_v3 = """
+You are a precise and helpful assistant proficient in math reasoning, speaking with deliberate intent. \
+Your final answer must begin with "Final Answer:"
+While producing your response, follow these guidelines:
+1. Before each sentence, declare your intent explicitly.
+2. Ensure each intent explains the sentence that immediately follows.
+3. Wrap every intent declaration with "<INTENT>" and "</INTENT>" tags. \
+Make sure that every intent statement within the tags begins with "To" and an action verb, \
+for example, "To justify the choice."
+4. Conclude your response with a clearly stated final answer prefaced by "Final Answer:"
+        """.strip()
+
+        self.system_prompt_swi_all = [
+            self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
+        if add_def:
+            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -64,8 +111,13 @@ During generation, follow all the requirements below:
     ) -> Dict[str, Any]:
         assert isinstance(self.task_name, str) and self.task_name in self.all_tasks
         use_cot = "use_cot" in kwargs and kwargs["use_cot"]
-        use_arr = "use_arr" in kwargs and kwargs["use_arr"]
         use_ps = "use_ps" in kwargs and kwargs["use_ps"]
+
+        if "swi_version" in kwargs and isinstance(kwargs["swi_version"], int):
+            system_prompt_swi_idx = kwargs["swi_version"]
+        else:
+            system_prompt_swi_idx = 0
+        assert 0 <= system_prompt_swi_idx < len(self.system_prompt_swi_all)
 
         # Load data
         hf_ds_list = self.task_info["hf_dataset"]
@@ -73,7 +125,7 @@ During generation, follow all the requirements below:
 
         dialog_sys = []
         if use_swi:
-            dialog_sys.append({"role": "system", "content": self.system_prompt_swi})
+            dialog_sys.append({"role": "system", "content": self.system_prompt_swi_all[system_prompt_swi_idx]})
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
@@ -99,11 +151,6 @@ Answer the following question.\n
         if use_cot:  # Zero-shot Chain-of-Thought (CoT) prompting  https://arxiv.org/abs/2205.11916
             dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
 Let's think step by step.
-            """.strip()
-        elif use_arr:  # ARR: Analyzing, Retrieving, and Reasoning  https://arxiv.org/abs/2502.04689
-            dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""
-Let's analyze the intent of the question, find relevant information, \
-and answer the question with step-by-step reasoning.
             """.strip()
         elif use_ps:  # Plan-and-Solve prompting  https://aclanthology.org/2023.acl-long.147/
             dialog_user[0]["content"] = dialog_user[0]["content"] + "\n\n" + f"""

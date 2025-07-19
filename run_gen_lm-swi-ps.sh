@@ -81,7 +81,7 @@ if [[ -z ${PROJECT_DIR} ]]; then
   PROJECT_DIR="${HOME}/projects/SWI"
 fi
 if [[ -z ${OUTPUT_DIR} ]]; then
-  OUTPUT_DIR="${PROJECT_DIR}/results/results--swi"  # ${MODEL_NAME} is subdir
+  OUTPUT_DIR="${PROJECT_DIR}/results/results--swi_ps"  # ${MODEL_NAME} is subdir
 fi
 echo -e "CACHE_DIR: ${CACHE_DIR}"
 echo -e "PROJECT_DIR: ${PROJECT_DIR}"
@@ -100,7 +100,7 @@ else
   EVAL_TASK_NAME="${EVAL_TASKS}"
 fi
 
-echo -e "\n\n >>> python3 run_gen_lm.py --use_swi --eval_task_name ${EVAL_TASK_NAME} --hf_id ${MODEL}"
+echo -e "\n\n >>> python3 run_gen_lm.py --use_swi --use_ps --eval_task_name ${EVAL_TASK_NAME} --hf_id ${MODEL}"
 python3 run_gen_lm.py \
   --task "${TASK}" \
   --eval_task_name "${EVAL_TASK_NAME}" \
@@ -113,4 +113,5 @@ python3 run_gen_lm.py \
   --gen_temperature "${GEN_TEMP}" \
   --max_gen_len "${MAX_GEN_LEN}" \
   --use_swi --swi_version "${SWI_VERSION}" \
+  --use_ps \
   --verbose

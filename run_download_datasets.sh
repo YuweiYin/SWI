@@ -17,12 +17,6 @@ python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CAC
   --hf_id "madrylab/gsm8k-platinum"  # GSM8K-Platinum
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
   --hf_id "HuggingFaceH4/MATH-500"  # MATH500
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "math-ai/amc23"  # AMC23
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "HuggingFaceH4/aime_2024"  # AIME24
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "math-ai/aime25"  # AIME25
 
 # Text Summarization
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
@@ -32,27 +26,13 @@ python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CAC
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
   --hf_id "GEM/xlsum" --subset "english"  # XL-Sum
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "Samsung/samsum"  # SAMSum
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
   --hf_id "knkarthick/dialogsum"  # DialogSum
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
   --hf_id "GEM/wiki_lingua"  # Wikilingua
 
-# Multiple-choice Question Answering
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "allenai/ai2_arc" --subset "ARC-Easy"  # ARC Easy
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "allenai/ai2_arc" --subset "ARC-Challenge"  # ARC Challenge
+# Multi-task Multiple-choice Question Answering
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
   --hf_id "TIGER-Lab/MMLU-Pro"  # MMLU-Pro
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "EleutherAI/logiqa"  # LogiQA
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "tau/commonsense_qa"  # CommonsenseQA
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "social_i_qa"  # SocialIQA
-python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \
-  --hf_id "allenai/openbookqa" --subset "additional"  # OpenBookQA
 
 # Multiple-choice QA - Big-Bench Hard (BBH)
 python3 utils/download_hf_dataset.py --hf_token "${HF_TOKEN}" --cache_dir "${CACHE_DIR}" --trust_remote_code \

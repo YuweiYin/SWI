@@ -16,31 +16,22 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from datasets import Dataset
 
-# Mathematical Reasoning (Math)
-from tasks.gsm8k import EvalTaskGSM8K
-from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-from tasks.math500 import EvalTaskMATH500
-from tasks.amc23 import EvalTaskAMC23
-from tasks.aime24 import EvalTaskAIME24
-from tasks.aime25 import EvalTaskAIME25
-
-# Multiple-choice Question Answering (MCQA)
-from tasks.logiqa import EvalTaskLogiQA
-from tasks.commonsense_qa import EvalTaskCommonsenseQA
-from tasks.social_iqa import EvalTaskSocialIQA
-from tasks.openbookqa import EvalTaskOpenbookQA
-from tasks.ai2_arc import EvalTaskAi2Arc
-from tasks.bbh import EvalTaskBbh
-from tasks.mmlu import EvalTaskMmlu
-from tasks.mmlu_pro import EvalTaskMmluPro
-
 # Text Summarization (Sum)
 from tasks.cnn_dailymail import EvalTaskCnnDailymail
 from tasks.xsum import EvalTaskXSum
 from tasks.xlsum import EvalTaskXlSum
-from tasks.samsum import EvalTaskSamSum
 from tasks.dialogsum import EvalTaskDialogSum
 from tasks.wiki_lingua import EvalTaskWikiLingua
+
+# Multi-task Multiple-choice Question Answering (QA)
+from tasks.bbh import EvalTaskBbh
+from tasks.mmlu import EvalTaskMmlu
+from tasks.mmlu_pro import EvalTaskMmluPro
+
+# Mathematical Reasoning (Math)
+from tasks.gsm8k import EvalTaskGSM8K
+from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
+from tasks.math500 import EvalTaskMATH500
 
 from utils.init_functions import logger_setup, cuda_setup, random_setup
 
@@ -62,7 +53,9 @@ class LMGen:
             output_dir: Optional[str] = None,
             max_gen_len: int = 4096,
             gen_temperature: float = 0.0,
+            swi_version: int = 0,
             use_swi: bool = False,
+            add_def: bool = False,
             use_cot: bool = False,
             use_arr: bool = False,
             use_ps: bool = False,
@@ -86,39 +79,32 @@ class LMGen:
         self.bsz = bsz
         self.max_gen_len = max_gen_len
         self.gen_temperature = gen_temperature
+        self.swi_version = swi_version
         self.use_swi = use_swi
+        self.add_def = add_def
         self.use_cot = use_cot
         self.use_arr = use_arr
         self.use_ps = use_ps
 
         self.task_class_dict = {
-            # Mathematical Reasoning (Math)
-            "gsm8k": EvalTaskGSM8K,
-            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
-            "math500": EvalTaskMATH500,
-            "amc23": EvalTaskAMC23,
-            "aime24": EvalTaskAIME24,
-            "aime25": EvalTaskAIME25,
-            # Multiple-choice Question Answering (MCQA)
-            "logiqa": EvalTaskLogiQA,
-            "commonsense_qa": EvalTaskCommonsenseQA,
-            "social_iqa": EvalTaskSocialIQA,
-            "openbookqa": EvalTaskOpenbookQA,
-            "ai2_arc": EvalTaskAi2Arc,
-            "bbh": EvalTaskBbh,
-            "mmlu": EvalTaskMmlu,
-            "mmlu_pro": EvalTaskMmluPro,
             # Text Summarization (Sum)
             "cnn_dailymail": EvalTaskCnnDailymail,
             "xsum": EvalTaskXSum,
             "xlsum": EvalTaskXlSum,
-            "samsum": EvalTaskSamSum,
             "dialogsum": EvalTaskDialogSum,
             "wiki_lingua": EvalTaskWikiLingua,
+            # Multi-task Multiple-choice Question Answering (QA)
+            "bbh": EvalTaskBbh,
+            "mmlu": EvalTaskMmlu,
+            "mmlu_pro": EvalTaskMmluPro,
+            # Mathematical Reasoning (Math)
+            "gsm8k": EvalTaskGSM8K,
+            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
+            "math500": EvalTaskMATH500,
         }
-        self.math_set = {"gsm8k", "gsm8k_platinum", "math500", "amc23", "aime24", "aime25"}
-        self.mcqa_set = {"logiqa", "commonsense_qa", "social_iqa", "openbookqa", "ai2_arc", "bbh", "mmlu", "mmlu_pro"}
-        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "samsum", "dialogsum", "wiki_lingua"}
+        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua"}
+        self.math_set = {"gsm8k", "gsm8k_platinum", "math500"}
+        self.mcqa_set = {"bbh", "mmlu", "mmlu_pro"}
 
         # Cache directory
         self.home_dir = os.path.expanduser("~")
@@ -242,7 +228,8 @@ class LMGen:
                     do_sample=self.gen_temperature > 0.0,
                     # do_sample=True,  # False: greedy decoding (the most deterministic)
                     temperature=self.gen_temperature if self.gen_temperature > 0.0 else None,  # defaults to 1.0
-                    # top_p=0.9,  # defaults to 1.0
+                    top_p=None,  # defaults to 1.0
+                    top_k=None,
                     # output_attentions=False,
                     # output_hidden_states=False,
                     # output_scores=True,
@@ -340,7 +327,7 @@ class LMGen:
     ):
         # Generation Phase: load datasets, load the model, set prompts, freely generation,
         #   and save results to JSON files (task/dataset information, input, and output)
-        #   [apply chat templates for Chat models]
+        #   [optionally, apply chat templates for Chat models]
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         assert isinstance(self.output_dir, str), "Please specify --output_dir"
@@ -353,6 +340,7 @@ class LMGen:
             logger=self.logger,
             cache_dir=self.cache_dir,
             project_dir=self.project_dir,
+            add_def=self.add_def,
         )
 
         self.logger.info(f">>> Evaluation Task: {eval_task_name}")
@@ -401,6 +389,7 @@ class LMGen:
                     use_cot=self.use_cot,
                     use_arr=self.use_arr,
                     use_ps=self.use_ps,
+                    swi_version=self.swi_version,
                 )
                 item_info = prompt_dict["info"]
 
@@ -410,7 +399,9 @@ class LMGen:
                     tokenize=False,
                     padding=False,
                     add_generation_prompt=True,
-                    return_tensors=None
+                    return_tensors=None,
+                    # enable_thinking=True,  # Qwen: Switches between thinking and non-thinking modes.
+                    enable_thinking=False,  # Note: The thinking mode of Qwen may not need prompts like CoT
                 )
                 assert isinstance(cur_prompt, str)
                 gen_dict = self.run_generation(
@@ -467,7 +458,9 @@ def main(
     output_dir: Optional[str] = None,
     max_gen_len: int = 4096,
     gen_temperature: float = 0.0,
+    swi_version: int = 0,
     use_swi: bool = False,
+    add_def: bool = False,
     use_cot: bool = False,
     use_arr: bool = False,
     use_ps: bool = False,
@@ -491,7 +484,9 @@ def main(
     :param output_dir: The path to the output file where the result metrics will be saved.
     :param max_gen_len: The maximum number of newly generated tokens.
     :param gen_temperature: The temperature used in LLM generation. Default: 0.0
+    :param swi_version: The SWI prompt version to use. Default: 0. Choices: 0, 1, 2, 3, 4, 5.
     :param use_swi: Use our SWI method or not. SWI: Speaking with Intent
+    :param add_def: Add (prepend) the definition of intent to the SWI system prompt or not.
     :param use_cot: Use zero-shot Chain-of-Thought prompting method or not.  https://arxiv.org/abs/2205.11916
     :param use_arr: Use ARR method or not. ARR: Analyzing, Retrieving, and Reasoning.  https://arxiv.org/abs/2502.04689
     :param use_ps: Use Plan-and-Solve method or not.  https://aclanthology.org/2023.acl-long.147/
@@ -515,6 +510,12 @@ def main(
     else:
         cache_dir = None
 
+    from transformers import modeling_utils
+
+    if not hasattr(modeling_utils, "ALL_PARALLEL_STYLES") or modeling_utils.ALL_PARALLEL_STYLES is None:
+        logger.info(f">>> Manually fix potential issues about `modeling_utils.ALL_PARALLEL_STYLES`")
+        modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
+
     lm_gen = LMGen(
         verbose=verbose,
         logger=logger,
@@ -528,7 +529,9 @@ def main(
         output_dir=output_dir,
         max_gen_len=int(max_gen_len),
         gen_temperature=float(gen_temperature),
+        swi_version=int(swi_version),
         use_swi=use_swi,
+        add_def=add_def,
         use_cot=use_cot,
         use_arr=use_arr,
         use_ps=use_ps,
