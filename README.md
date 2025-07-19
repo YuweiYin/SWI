@@ -124,7 +124,7 @@ bash run_eval_lm.sh "1;42;${MODEL};1;ALL;ALL;0.0" "${CACHE_DIR}" "${PROJECT_DIR}
 
 - **Datasets**: CNN/DailyMail (CDM), XSum, XL-Sum, DialogSum, and WikiLingua
 - **Comparison**:
-  - [x] Baseline (w/o SWI)
+  - [x] DA: Direct Answer (w/o SWI)
   - [x] **SWI** (Ours): Require LLMs to speak with (their own) intent.
 - **Setting**:
   - Reference: [BottleHumor](https://arxiv.org/pdf/2502.18331) (Section 4.4)
@@ -142,15 +142,14 @@ bash run_eval_lm.sh "1;42;${MODEL};1;ALL;ALL;0.0" "${CACHE_DIR}" "${PROJECT_DIR}
 CACHE_DIR="YOUR_HF_CACHE_DIR"  # E.g., "${HOME}/.cache/huggingface/"
 PROJECT_DIR="/path/to/SWI/"
 MODEL="meta-llama/Llama-3.1-8B-Instruct"
-GEN_TEMP="0.0"
-EVAL_NUM="100"
-OUTPUT_DIR="${PROJECT_DIR}/results/swi_results-temp_${GEN_TEMP}"  # Baseline
+OUTPUT_DIR="${PROJECT_DIR}/results/results"
 OPENAI_API_KEY="YOUR_OPENAI_API_KEY"  # Input your valid key here. We use "gpt-4o-mini" by default
+EVAL_NUM="100"
 
 echo -e "\n\n >>> bash run_eval_prf.sh --hf_id ${MODEL} SUM_ALL PRF [Baseline]"
-bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;${GEN_TEMP};${EVAL_NUM}" "${CACHE_DIR}" "${PROJECT_DIR}" "${OUTPUT_DIR}" "${OPENAI_API_KEY}"
+bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;0.0;${EVAL_NUM}" "${CACHE_DIR}" "${PROJECT_DIR}" "${OUTPUT_DIR}--da" "${OPENAI_API_KEY}"
 echo -e "\n\n >>> bash run_eval_prf.sh --hf_id ${MODEL} SUM_ALL PRF [SWI]"
-bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;${GEN_TEMP};${EVAL_NUM}" "${CACHE_DIR}" "${PROJECT_DIR}" "${OUTPUT_DIR}-swi" "${OPENAI_API_KEY}"
+bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;0.0;${EVAL_NUM}" "${CACHE_DIR}" "${PROJECT_DIR}" "${OUTPUT_DIR}--swi" "${OPENAI_API_KEY}"
 ```
 
 </details>
@@ -163,9 +162,7 @@ bash run_eval_prf.sh "1;${MODEL};1;SUM_ALL;${GEN_TEMP};${EVAL_NUM}" "${CACHE_DIR
 CACHE_DIR="YOUR_HF_CACHE_DIR"  # E.g., "${HOME}/.cache/huggingface/"
 PROJECT_DIR="/path/to/SWI/"
 MODEL="meta-llama/Llama-3.1-8B-Instruct"
-GEN_TEMP="0.0"
-OUTPUT_DIR_BASELINE="${PROJECT_DIR}/results/swi_results-temp_${GEN_TEMP}"  # Baseline results
-OUTPUT_DIR_SWI="${PROJECT_DIR}/results/swi_results-temp_${GEN_TEMP}-swi"  # SWI results (speaking with intent)
+OUTPUT_DIR="${PROJECT_DIR}/results/results"
 
 # We sample 12 data points per dataset and convert the JSON results into CSV for Human Evaluation.
 # Each data point has 3 duplications and each of them is evaluate by different native English speaker. 420 in total
@@ -174,7 +171,7 @@ do
   echo -e "\n\n >>> python3 run_human_eval_intent.py ${TASK_TYPE}"
   python3 run_human_eval_intent.py --verbose --task 1 --hf_id "${MODEL}" \
     --cache_dir "${CACHE_DIR}" --project_dir "${PROJECT_DIR}" \
-    --output_dir "${OUTPUT_DIR_SWI}" \
+    --output_dir "${OUTPUT_DIR}--swi" \
     --min_doc_length 500 --max_doc_length 1000 \
     --num_item_per_task 12 --num_duplication 3 --num_item_in_a_row 6 --eval_task_name "${TASK_TYPE}"
 done
