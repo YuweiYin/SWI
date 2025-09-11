@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskDialogSum(EvalTaskManager):
+class TaskWikiLingua(TaskManager):
 
     def __init__(
             self,
@@ -18,27 +18,17 @@ class EvalTaskDialogSum(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
-        # DialogSum: Summarization
-        # Train = 12460, Valid = 500, Test = 1500
-        # Features: ["id", "dialogue", "summary", "topic"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 1500; avg_len_token: 263.306; std_len_token: 107.534
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 1500; avg_len_token: 406.306; std_len_token: 107.534
+        # WikiLingua: Summarization
+        # Train = 95517, Valid = 13340, Test = 27489; "sampled_validation" = 3000, "sampled_test" = 3000
 
-        self.task_name = "dialogsum"
+        self.task_name = "wiki_lingua"
         self.task_info = {
             "hf_dataset": [  # [hf_id, subset, eval_set]
-                ["knkarthick/dialogsum", None, "test"],
+                ["GEM/wiki_lingua", None, "sampled_test"],
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = """
 You are a helpful assistant. \
@@ -91,8 +81,6 @@ for example, "To justify the choice."
 
         self.system_prompt_swi_all = [
             self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
-        if add_def:
-            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -122,20 +110,27 @@ for example, "To justify the choice."
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
-        # Process data ["id", "dialogue", "summary", "topic"]
-        article = str(data_item["dialogue"]).strip().replace("\n\n", "\n")
-        summary = str(data_item["summary"]).strip()
-        answers = [summary]
+        # Process data ["source_language", "target_language", "source", "target", "references"]
+        src_lang = str(data_item["source_language"]).strip()
+        tgt_lang = str(data_item["target_language"]).strip()
+        if not (src_lang == tgt_lang == "en"):  # Only deal with English documents
+            return {}
+
+        article = str(data_item["source"]).strip().replace("\n\n", "\n")
+        summary = str(data_item["target"]).strip()
+        answers = list(data_item["references"])
+        answers = [str(_ans).strip() for _ans in answers]
+        assert summary in answers
 
         # Set the main prompt (zero-shot)
         if use_swi:  # SWI (ours): Speaking with Intent
             dialog_user = [{"role": "user", "content": f"""
-Speak with intent and summarize the following dialogue.\n
+Speak with intent and summarize the following article.\n
 {article}
             """.strip()}]
         else:  # Baseline: LLM Generation without Intent
             dialog_user = [{"role": "user", "content": f"""
-Summarize the following dialogue.\n
+Summarize the following article.\n
 {article}
             """.strip()}]
 

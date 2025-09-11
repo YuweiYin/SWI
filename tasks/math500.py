@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskGSM8KPlatinum(EvalTaskManager):
+class TaskMATH500(TaskManager):
 
     def __init__(
             self,
@@ -18,27 +18,24 @@ class EvalTaskGSM8KPlatinum(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
-        # GSM8K-Platinum: Mathematical Reasoning
-        # Train = 0, Valid = 0, Test = 1209
-        # Features: ["question", "answer", "cleaning_status"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 1209; avg_len_token: 122.595; std_len_token: 21.378
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 1209; avg_len_token: 267.595; std_len_token: 21.378
+        # MATH500: Mathematical Reasoning
+        # Train = 0, Valid = 0, Test = 500
 
-        self.task_name = "gsm8k_platinum"
+        self.task_name = "math500"
         self.task_info = {
             "hf_dataset": [  # [hf_id, subset, eval_set]
-                ["madrylab/gsm8k-platinum", None, "test"],
+                ["HuggingFaceH4/MATH-500", None, "test"],  # Train = 0, Test = 500
+                # ["EleutherAI/hendrycks_math", "algebra", "test"],  # Train = 1744, Test = 1187
+                # ["EleutherAI/hendrycks_math", "counting_and_probability", "test"],  # Train = 771, Test = 474
+                # ["EleutherAI/hendrycks_math", "geometry", "test"],  # Train = 870, Test = 479
+                # ["EleutherAI/hendrycks_math", "intermediate_algebra", "test"],  # Train = 1295, Test = 903
+                # ["EleutherAI/hendrycks_math", "number_theory", "test"],  # Train = 869, Test = 540
+                # ["EleutherAI/hendrycks_math", "prealgebra", "test"],  # Train = 1205, Test = 871
+                # ["EleutherAI/hendrycks_math", "precalculus", "test"],  # Train = 746, Test = 546
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = """
 You are a helpful assistant. \
@@ -91,8 +88,6 @@ for example, "To justify the choice."
 
         self.system_prompt_swi_all = [
             self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
-        if add_def:
-            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -122,11 +117,10 @@ for example, "To justify the choice."
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
-        # Process data ["question", "answer", "cleaning_status"]
-        question = str(data_item["question"]).strip().replace("\n\n", "\n")
-        solution = str(data_item["answer"]).strip().replace("\n\n", "\n")
-        assert "####" in solution
-        answer = solution.split("####")[-1].strip()
+        # Process data ["problem", "solution", "answer", "subject", "level", "unique_id"]
+        question = str(data_item["problem"]).strip().replace("\n\n", "\n")
+        solution = str(data_item["solution"]).strip().replace("\n\n", "\n")
+        answer = str(data_item["answer"]).strip().replace("\n", "")
         answers = [answer]
 
         # Set the main prompt (zero-shot)

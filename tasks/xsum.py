@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskXlSum(EvalTaskManager):
+class TaskXSum(TaskManager):
 
     def __init__(
             self,
@@ -18,27 +18,17 @@ class EvalTaskXlSum(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
-        # XL-Sum: Summarization (professionally annotated article-summary pairs from BBC)
-        # Train = 306521, Valid = 11535, Test = 11535
-        # Features: ["gem_id", "url", "title", "target", "references", "text"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 11535; avg_len_token: 613.040; std_len_token: 323.792
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 11535; avg_len_token: 756.040; std_len_token: 323.792
+        # XSum: Summarization
+        # Train = 204045, Valid = 11332, Test = 11334
 
-        self.task_name = "xlsum"
+        self.task_name = "xsum"
         self.task_info = {
             "hf_dataset": [  # [hf_id, subset, eval_set]
-                ["GEM/xlsum", "english", "test"],
+                ["EdinburghNLP/xsum", None, "test"],
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = """
 You are a helpful assistant. \
@@ -91,8 +81,6 @@ for example, "To justify the choice."
 
         self.system_prompt_swi_all = [
             self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
-        if add_def:
-            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -122,20 +110,20 @@ for example, "To justify the choice."
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
-        # Process data ["gem_id", "url", "title", "target", "references", "text"]
-        article = str(data_item["text"]).strip().replace("\n\n", "\n")
-        summary = str(data_item["target"]).strip()
+        # Process data ["document", "summary", "id"]
+        article = str(data_item["document"]).strip().replace("\n\n", "\n")
+        summary = str(data_item["summary"]).strip()
         answers = [summary]
 
         # Set the main prompt (zero-shot)
         if use_swi:  # SWI (ours): Speaking with Intent
             dialog_user = [{"role": "user", "content": f"""
-Speak with intent and summarize the following article.\n
+Speak with intent and summarize the following document.\n
 {article}
             """.strip()}]
         else:  # Baseline: LLM Generation without Intent
             dialog_user = [{"role": "user", "content": f"""
-Summarize the following article.\n
+Summarize the following document.\n
 {article}
             """.strip()}]
 

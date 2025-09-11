@@ -47,7 +47,7 @@ if [[ -z ${EVAL_NUM} ]]; then
   EVAL_NUM="100"
 fi
 
-MODEL_NAME="${MODEL//[\/]/_}"
+MODEL_NAME="${MODEL//[\/]/--}"
 SEED=42
 
 echo -e "TASK: ${TASK}"
@@ -63,10 +63,10 @@ CACHE_DIR=$2
 PROJECT_DIR=$3
 OUTPUT_DIR=$4
 if [[ -z ${CACHE_DIR} ]]; then
-  CACHE_DIR="${HOME}/projects/def-carenini/yuweiyin/.cache/huggingface"
+  CACHE_DIR="${HOME}/.cache/huggingface"
 fi
 if [[ -z ${PROJECT_DIR} ]]; then
-  PROJECT_DIR="${HOME}/projects/def-carenini/yuweiyin/projects/SWI"
+  PROJECT_DIR="${HOME}/projects/SWI"
 fi
 if [[ -z ${OUTPUT_DIR} ]]; then
   # Make sure "${OUTPUT_DIR}/${EVAL_TASKS}" exists and contains the target task/dataset to evaluate

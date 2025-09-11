@@ -12,29 +12,12 @@ import string
 from typing import Optional, List
 
 import fire
-import numpy as np
 import pandas as pd
 
 from datasets import Dataset
 
-# Text Summarization (Sum)
-from tasks.cnn_dailymail import EvalTaskCnnDailymail
-from tasks.xsum import EvalTaskXSum
-from tasks.xlsum import EvalTaskXlSum
-from tasks.dialogsum import EvalTaskDialogSum
-from tasks.wiki_lingua import EvalTaskWikiLingua
-
-# Multi-task Multiple-choice Question Answering (QA)
-from tasks.bbh import EvalTaskBbh
-from tasks.mmlu import EvalTaskMmlu
-from tasks.mmlu_pro import EvalTaskMmluPro
-
-# Mathematical Reasoning (Math)
-from tasks.gsm8k import EvalTaskGSM8K
-from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-from tasks.math500 import EvalTaskMATH500
-
 from utils.init_functions import logger_setup, cuda_setup, random_setup
+from tasks.tasks_utils import *
 
 
 class HumanEvalIntent:
@@ -87,31 +70,14 @@ class HumanEvalIntent:
         if self.verbose:
             self.logger.info(f">>> cache_dir: {self.cache_dir}")
 
-        os.environ["TRANSFORMERS_CACHE"] = self.cache_dir
         os.environ["HF_HOME"] = self.cache_dir
-        self.model_path = os.path.join(
-            self.cache_dir, "models--" + self.hf_name, "snapshots/model")
-        assert os.path.isdir(self.model_path), f"AssertionError: assert os.path.isdir({self.model_path})"
+        local_model_path = os.path.join(self.cache_dir, "models--" + self.hf_name, "snapshots/model")
+        self.model_path = local_model_path if os.path.isdir(local_model_path) else hf_id
 
-        self.task_class_dict = {
-            # Text Summarization (Sum)
-            "cnn_dailymail": EvalTaskCnnDailymail,
-            "xsum": EvalTaskXSum,
-            "xlsum": EvalTaskXlSum,
-            "dialogsum": EvalTaskDialogSum,
-            "wiki_lingua": EvalTaskWikiLingua,
-            # Multi-task Multiple-choice Question Answering (QA)
-            "bbh": EvalTaskBbh,
-            "mmlu": EvalTaskMmlu,
-            "mmlu_pro": EvalTaskMmluPro,
-            # Mathematical Reasoning (Math)
-            "gsm8k": EvalTaskGSM8K,
-            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
-            "math500": EvalTaskMATH500,
-        }
-        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua"}
-        self.math_set = {"gsm8k", "gsm8k_platinum", "math500"}
-        self.mcqa_set = {"bbh", "mmlu", "mmlu_pro"}
+        self.task_class_dict = TASK_CLASS_DICT
+        self.sum_class_dict = SUM_CLASS_DICT
+        self.qa_class_dict = QA_CLASS_DICT
+        self.math_class_dict = MATH_CLASS_DICT
 
         self.punc_list = [ch for ch in string.punctuation]
         self.space_list = [ch for ch in string.whitespace]
@@ -120,15 +86,6 @@ class HumanEvalIntent:
         self.punc_remover = str.maketrans("", "", string.punctuation)  # r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
         self.space_remover = str.maketrans("", "", string.whitespace)  # " \t\n\r\v\f"
         self.re_math = re.compile(r"(\$.*?\$)")  # Match math expressions
-
-    @staticmethod
-    def _handle_non_serializable(o):
-        if isinstance(o, np.int64) or isinstance(o, np.int32):
-            return int(o)
-        elif isinstance(o, set):
-            return list(o)
-        else:
-            return str(o)
 
     def string_clean(
             self,
@@ -234,7 +191,6 @@ class HumanEvalIntent:
             logger=self.logger,
             cache_dir=self.cache_dir,
             project_dir=self.project_dir,
-            # add_def=True,
         )
 
         self.logger.info(f">>> Evaluation Task: {eval_task_name}")
@@ -599,8 +555,8 @@ def main(
     cuda_dict = cuda_setup(cuda=cuda, logger=logger, verbose=verbose)
     random_setup(seed=seed, has_cuda=cuda_dict["has_cuda"])
 
-    if isinstance(kwargs, dict):
-        logger.info(f">>> Unused parameters in kwargs: {kwargs}")
+    if isinstance(kwargs, dict) and len(kwargs) > 0:
+        logger.info(f">>> Extra parameters in kwargs: {kwargs}")
     logger.info(f">>> cuda_dict: {cuda_dict}")
 
     if isinstance(cache_dir, str) and os.path.isdir(cache_dir):

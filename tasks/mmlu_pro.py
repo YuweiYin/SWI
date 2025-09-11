@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskMmluPro(EvalTaskManager):
+class TaskMmluPro(TaskManager):
 
     def __init__(
             self,
@@ -18,15 +18,10 @@ class EvalTaskMmluPro(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
         # MMLU-Pro: Question Answering (Multiple-Choice QA)
         # Train = 0, Validation = 70, Test = 12032
-        # Features: ["question_id", "question", "options", "answer", "answer_index",
-        #   "cot_content", "category", "src"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 12032; avg_len_token: 270.106; std_len_token: 115.860
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 12032; avg_len_token: 415.106; std_len_token: 115.860
 
         self.task_name = "mmlu_pro"
         self.task_info = {
@@ -34,12 +29,6 @@ class EvalTaskMmluPro(EvalTaskManager):
                 ["TIGER-Lab/MMLU-Pro", None, "test"],
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = f"""
 You are a helpful assistant. \
@@ -59,9 +48,6 @@ During generation, follow all the requirements below:
 The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final answer starting with "Final Answer:"
         """.strip()
-
-        if add_def:
-            self.system_prompt_swi = intent_def + "\n\n" + self.system_prompt_swi
 
     def set_dialog(
             self,

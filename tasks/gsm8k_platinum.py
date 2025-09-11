@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskGSM8K(EvalTaskManager):
+class TaskGSM8KPlatinum(TaskManager):
 
     def __init__(
             self,
@@ -18,27 +18,17 @@ class EvalTaskGSM8K(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
-        # GSM8K: Mathematical Reasoning
-        # Train = 7473, Valid = 0, Test = 1319
-        # Features: ["question", "answer"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 1319; avg_len_token: 122.970; std_len_token: 21.771
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 1319; avg_len_token: 267.970; std_len_token: 21.771
+        # GSM8K-Platinum: Mathematical Reasoning
+        # Train = 0, Valid = 0, Test = 1209
 
-        self.task_name = "gsm8k"
+        self.task_name = "gsm8k_platinum"
         self.task_info = {
             "hf_dataset": [  # [hf_id, subset, eval_set]
-                ["openai/gsm8k", "main", "test"],
+                ["madrylab/gsm8k-platinum", None, "test"],
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = """
 You are a helpful assistant. \
@@ -91,8 +81,6 @@ for example, "To justify the choice."
 
         self.system_prompt_swi_all = [
             self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
-        if add_def:
-            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -122,7 +110,7 @@ for example, "To justify the choice."
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
-        # Process data ["question", "answer"]
+        # Process data ["question", "answer", "cleaning_status"]
         question = str(data_item["question"]).strip().replace("\n\n", "\n")
         solution = str(data_item["answer"]).strip().replace("\n\n", "\n")
         assert "####" in solution

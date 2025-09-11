@@ -5,10 +5,10 @@ __author__ = "@YuweiYin"
 
 from typing import Optional, Dict, Any
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskWikiLingua(EvalTaskManager):
+class TaskCnnDailymail(TaskManager):
 
     def __init__(
             self,
@@ -18,27 +18,17 @@ class EvalTaskWikiLingua(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
-        # WikiLingua: Summarization
-        # Train = 95517, Valid = 13340, Test = 27489; "sampled_validation" = 3000, "sampled_test" = 3000
-        # Features: ["gem_id", "gem_parent_id", "source_language", "target_language", "source", "target", "references"]
-        # Eval: sampled_test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 1; #Total Ins. = 3000; avg_len_token: 524.621; std_len_token: 274.830
-        # >>> [use_swi = True] >>> #Sub-Tasks = 1; #Total Ins. = 3000; avg_len_token: 667.621; std_len_token: 274.830
+        # CNN / DailyMail: Summarization
+        # Train = 287113, Valid = 13368, Test = 11490
 
-        self.task_name = "wiki_lingua"
+        self.task_name = "cnn_dailymail"
         self.task_info = {
             "hf_dataset": [  # [hf_id, subset, eval_set]
-                ["GEM/wiki_lingua", None, "sampled_test"],
+                ["abisee/cnn_dailymail", "3.0.0", "test"],
             ],
         }
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
 
         self.system_prompt_raw = """
 You are a helpful assistant. \
@@ -91,8 +81,6 @@ for example, "To justify the choice."
 
         self.system_prompt_swi_all = [
             self.system_prompt_swi, self.system_prompt_swi_v1, self.system_prompt_swi_v2, self.system_prompt_swi_v3]
-        if add_def:
-            self.system_prompt_swi_all = [intent_def + "\n\n" + _p for _p in self.system_prompt_swi_all]
 
     def set_dialog(
             self,
@@ -122,17 +110,10 @@ for example, "To justify the choice."
         else:
             dialog_sys.append({"role": "system", "content": self.system_prompt_raw})
 
-        # Process data ["source_language", "target_language", "source", "target", "references"]
-        src_lang = str(data_item["source_language"]).strip()
-        tgt_lang = str(data_item["target_language"]).strip()
-        if not (src_lang == tgt_lang == "en"):  # Only deal with English documents
-            return {}
-
-        article = str(data_item["source"]).strip().replace("\n\n", "\n")
-        summary = str(data_item["target"]).strip()
-        answers = list(data_item["references"])
-        answers = [str(_ans).strip() for _ans in answers]
-        assert summary in answers
+        # Process data ["article", "highlights", "id"]
+        article = str(data_item["article"]).strip().replace("\n\n", "\n")
+        summary = str(data_item["highlights"]).strip()
+        answers = [summary]
 
         # Set the main prompt (zero-shot)
         if use_swi:  # SWI (ours): Speaking with Intent

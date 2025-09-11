@@ -6,7 +6,6 @@ __author__ = "@YuweiYin" and "@eujhwang"
 
 import os
 import time
-import json
 import string
 import random
 import logging
@@ -19,6 +18,8 @@ import openai
 from openai import AzureOpenAI
 
 from utils.eval_utils import FACT_DECOM_PROMPT, FACT_INFER_PROMPT
+from utils.data_io import DataIO
+from tasks.tasks_utils import SUM_CLASS_DICT
 
 
 class SummaryEval:
@@ -63,23 +64,8 @@ class SummaryEval:
             self.logger.info(f">>> !!! >>> Can NOT build the OpenAI agent: openai_api_key = {self.openai_api_key}\n{e}")
             self.client = None
 
-        self.sum_task_set = {
-            # Text Summarization
-            "dialogsum", "wiki_lingua",  # Num Items: DialogSum = 1,500; WikiLingua = 3,000
-            "cnn_dailymail", "xsum", "xlsum",  # Num Items: CDM = 11,490; XSum = 11,334; XL-Sum = 11,535
-        }
-
         self.punc_remover = str.maketrans("", "", string.punctuation)  # r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
         self.space_remover = str.maketrans("", "", string.whitespace)  # " \t\n\r\v\f"
-
-    @staticmethod
-    def _handle_non_serializable(o):
-        if isinstance(o, np.int64) or isinstance(o, np.int32):
-            return int(o)
-        elif isinstance(o, set):
-            return list(o)
-        else:
-            return str(o)
 
     def send_request(
             self,
@@ -162,15 +148,14 @@ class SummaryEval:
             self,
             eval_task_name: str,
     ):
-        assert eval_task_name in self.sum_task_set, f"AssertionError: task {eval_task_name} not in sum_task_set"
+        assert eval_task_name in SUM_CLASS_DICT, f"AssertionError: task {eval_task_name} not in SUM_CLASS_DICT"
 
         # Load the generation outputs
         assert isinstance(self.results_dir, str) and os.path.isdir(self.results_dir), "Please specify --results_dir"
         results_dir = os.path.join(self.results_dir, eval_task_name, self.hf_name)
         results_fp = os.path.join(results_dir, "results_gen.json")
         assert os.path.isfile(results_fp), f"Assertion Error: results_fp does not exist: {results_fp}"
-        with open(results_fp, "r", encoding="utf-8") as fp_in:
-            results = json.load(fp_in)
+        results = DataIO.load_json(results_fp, verbose=self.verbose)
         assert isinstance(results, dict)
 
         # Set the saving filepath
@@ -354,14 +339,7 @@ class SummaryEval:
                          f"[# Missing Final Answer = {miss_final_cnt_total}]\n")
 
         # Save the generation outputs
-        dumped = json.dumps(
-            all_scores,
-            indent=2,  # indent=None,
-            default=self._handle_non_serializable,
-            ensure_ascii=True,
-        )
-        with open(eval_output_fp, "w", encoding="utf-8") as fp_out:
-            fp_out.write(dumped)
+        DataIO.save_json(eval_output_fp, all_scores, indent=2, verbose=self.verbose)
         self.logger.info(
             f">>> hf_id = {self.hf_id}; eval_output_fp: {os.path.abspath(eval_output_fp)}\n"
         )
@@ -408,8 +386,8 @@ def main(
     random.seed(seed)
     np.random.seed(seed)
 
-    if isinstance(kwargs, dict):
-        logger.info(f">>> Unused parameters in kwargs: {kwargs}")
+    if isinstance(kwargs, dict) and len(kwargs) > 0:
+        logger.info(f">>> Extra parameters in kwargs: {kwargs}")
 
     if isinstance(cache_dir, str) and os.path.isdir(cache_dir):
         os.environ["HF_HOME"] = cache_dir
@@ -440,13 +418,13 @@ def main(
 
     if isinstance(eval_task_name, tuple) or isinstance(eval_task_name, list):  # Deal with a list of eval tasks
         for cur_task_name in eval_task_name:
-            assert cur_task_name in lm_eval.sum_task_set, f"AssertionError: {cur_task_name} not in sum_task_set"
+            assert cur_task_name in SUM_CLASS_DICT, f"AssertionError: {cur_task_name} not in SUM_CLASS_DICT"
             cur_task_name = str(cur_task_name).strip()
             logger.info(f">>> <START> {cur_task_name}\n")
             lm_eval.run_evaluation(eval_task_name=cur_task_name)
             logger.info(f">>> <END> {cur_task_name}\n\n\n")
     elif isinstance(eval_task_name, str):  # Deal with a single eval task
-        assert eval_task_name in lm_eval.sum_task_set, f"AssertionError: task name {eval_task_name} not in sum_task_set"
+        assert eval_task_name in SUM_CLASS_DICT, f"AssertionError: task name {eval_task_name} not in SUM_CLASS_DICT"
         eval_task_name = str(eval_task_name).strip()
         logger.info(f">>> <START> {eval_task_name}\n")
         lm_eval.run_evaluation(eval_task_name=eval_task_name)

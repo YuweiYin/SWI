@@ -5,15 +5,14 @@ __author__ = "@YuweiYin"
 
 import os
 import re
-import json
 from typing import Optional, Dict, Any
 
 from datasets import load_dataset
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskBbh(EvalTaskManager):
+class TaskBbh(TaskManager):
 
     def __init__(
             self,
@@ -23,14 +22,10 @@ class EvalTaskBbh(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
         # BBH: Question Answering (27 subtasks: 23 Multiple-Choice QA + 4 Open QA)
         # Train = 0, Valid = 0, Test = 6511 (only MCQA: 5511)
-        # Features: ["input", "target"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 23; #Total Ins. = 5511; avg_len_token: 202.500; std_len_token: 73.391
-        # >>> [use_swi = True] >>> #Sub-Tasks = 23; #Total Ins. = 5511; avg_len_token: 347.500; std_len_token: 73.391
 
         self.task_name = "bbh"
         self.task_info = {
@@ -65,17 +60,7 @@ class EvalTaskBbh(EvalTaskManager):
             ],
         }
         self.open_qa_subtasks = {"word_sorting", "object_counting", "dyck_languages", "multistep_arithmetic_two"}
-
-        self.options_fp = os.path.join(project_dir, "tasks", self.task_name, "options.json")
-        assert os.path.isfile(self.options_fp)
-        with open(self.options_fp, "r", encoding="utf-8") as fp_in:
-            self.options = json.load(fp_in)
-
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
+        self.options = BBH_OPTIONS
 
         self.system_prompt_raw = f"""
 You are a helpful assistant. \
@@ -95,9 +80,6 @@ During generation, follow all the requirements below:
 The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final answer starting with "Final Answer:"
         """.strip()
-
-        if add_def:
-            self.system_prompt_swi = intent_def + "\n\n" + self.system_prompt_swi
 
     def load_task(
             self,
@@ -263,3 +245,159 @@ Then, let's carry out the plan and solve the problem step by step.
             }
         }
         return result_dict
+
+
+BBH_OPTIONS = {
+    "web_of_lies": [
+        "No",
+        "Yes"
+    ],
+    "tracking_shuffled_objects_three_objects": [
+        "(A)",
+        "(B)",
+        "(C)"
+    ],
+    "tracking_shuffled_objects_seven_objects": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)",
+        "(G)"
+    ],
+    "tracking_shuffled_objects_five_objects": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)"
+    ],
+    "temporal_sequences": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)"
+    ],
+    "sports_understanding": [
+        "no",
+        "yes"
+    ],
+    "snarks": [
+        "(A)",
+        "(B)"
+    ],
+    "salient_translation_error_detection": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)"
+    ],
+    "ruin_names": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)"
+    ],
+    "reasoning_about_colored_objects": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)",
+        "(G)",
+        "(H)",
+        "(I)",
+        "(J)",
+        "(K)",
+        "(L)",
+        "(M)",
+        "(N)",
+        "(O)",
+        "(P)",
+        "(Q)",
+        "(R)"
+    ],
+    "penguins_in_a_table": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)"
+    ],
+    "navigate": [
+        "No",
+        "Yes"
+    ],
+    "movie_recommendation": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)"
+    ],
+    "logical_deduction_three_objects": [
+        "(A)",
+        "(B)",
+        "(C)"
+    ],
+    "logical_deduction_seven_objects": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)",
+        "(G)"
+    ],
+    "logical_deduction_five_objects": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)"
+    ],
+    "hyperbaton": [
+        "(A)",
+        "(B)"
+    ],
+    "geometric_shapes": [
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)",
+        "(G)",
+        "(I)",
+        "(J)",
+        "(K)"
+    ],
+    "formal_fallacies": [
+        "invalid",
+        "valid"
+    ],
+    "disambiguation_qa": [
+        "(A)",
+        "(B)",
+        "(C)"
+    ],
+    "date_understanding": [
+        "(A)",
+        "(B)",
+        "(C)",
+        "(D)",
+        "(E)",
+        "(F)"
+    ],
+    "causal_judgement": [
+        "No",
+        "Yes"
+    ],
+    "boolean_expressions": [
+        "False",
+        "True"
+    ]
+}

@@ -5,21 +5,23 @@ __author__ = "@YuweiYin"
 """
 
 import os
+import sys
 import time
-from typing import Optional, List
+import logging
+from typing import Optional
 
 import fire
 
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from datasets import Dataset
+import openai
+from openai import APIError, APIConnectionError, RateLimitError
 
 from utils.init_functions import logger_setup, cuda_setup, random_setup
 from utils.data_io import DataIO
 from tasks.tasks_utils import *
 
 
-class LMGen:
+class GPTGen:
 
     def __init__(
             self,
@@ -29,12 +31,13 @@ class LMGen:
             seed: int = 42,
             cache_dir: Optional[str] = None,
             project_dir: Optional[str] = None,
-            hf_id: str = "meta-llama/Llama-3.1-8B-Instruct",
+            openai_model: str = "gpt-5-mini",
+            openai_api_key: Optional[str] = None,
             bsz: int = 1,
             show_generation: bool = False,
             debug: bool = False,
             output_dir: Optional[str] = None,
-            max_gen_len: int = 4096,
+            max_eval_num: int = -1,
             gen_temperature: float = 0.0,
             swi_version: int = 0,
             use_swi: bool = False,
@@ -46,8 +49,6 @@ class LMGen:
         self.logger = logger
         self.cuda_dict = cuda_dict
         self.seed = seed
-        self.hf_id = hf_id
-        self.hf_name = "--".join(hf_id.split("/"))
         self.show_generation = show_generation  # If True, show outputs during generation
         self.debug = debug
 
@@ -59,7 +60,7 @@ class LMGen:
 
         self.output_dir = output_dir
         self.bsz = bsz
-        self.max_gen_len = max_gen_len
+        self.max_eval_num = max_eval_num
         self.gen_temperature = gen_temperature
         self.swi_version = swi_version
         self.use_swi = use_swi
@@ -85,139 +86,119 @@ class LMGen:
             self.logger.info(f">>> cache_dir: {self.cache_dir}")
 
         os.environ["HF_HOME"] = self.cache_dir
-        local_model_path = os.path.join(self.cache_dir, "models--" + self.hf_name, "snapshots/model")
-        self.model_path = local_model_path if os.path.isdir(local_model_path) else hf_id
 
-        # Tokenizer and LLM model
-        self.tokenizer = self.load_tokenizer(model_path=self.model_path, padding_side="left", truncation_side="left")
-        self.terminators_gen = [
-            self.tokenizer.eos_token_id,
-            self.tokenizer.convert_tokens_to_ids(self.tokenizer.eos_token)
-        ]
-        self.terminators_gen_set = set(self.terminators_gen)
-        self.terminators_gen = list(self.terminators_gen_set)
-        self.model = None
-
-    def load_tokenizer(
-            self,
-            model_path,
-            padding_side="left",
-            truncation_side="left",
-    ):
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
-            padding_side=padding_side,
-            truncation_side=truncation_side,  # "right" for training, "left" for generating
-            cache_dir=self.cache_dir,
-            # local_files_only=True,
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
-        max_len = tokenizer.max_len_single_sentence
-        if self.verbose:
-            self.logger.info(
-                f">>> len(tokenizer.vocab) = {len(tokenizer.vocab)}; "
-                f"tokenizer.max_len_single_sentence = {max_len}")  # LLaMA-3: 131071
-
-        return tokenizer
-
-    def load_model(
-            self,
-            model_path,
-            tokenizer,
-    ):
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float16,  # torch.bfloat16
-            device_map="auto",  # !pip install accelerate
-            trust_remote_code=True,
-            cache_dir=self.cache_dir,
-            # local_files_only=True,
-        )
-        model.generation_config.pad_token_id = tokenizer.pad_token_id  # eos_token_id
-        model.eval()
-        total_params = sum(p.numel() for p in model.parameters())
-        train_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        if self.verbose:
-            self.logger.info(f">>> Base Model loaded: {model_path}")
-            self.logger.info(f">>> [Base Model] Number of total parameters: {total_params}")
-            self.logger.info(f">>> [Base Model] Number of trainable parameters: {train_params}")
-
-        return model
+        # OpenAI settings
+        # openai.organization = "YOUR_ORG_ID"
+        if isinstance(openai_api_key, str) and len(openai_api_key) > 0:
+            self.openai_api_key = openai_api_key
+        else:
+            self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.openai_model = openai_model
 
     @staticmethod
-    @torch.no_grad()
-    def open_model_gen(
-            inputs,
-            model,
-            tokenizer,
-            need_tokenize: bool = True,
-            max_new_tokens: int = 1024,
+    def call_gpt(
+            openai_model_name: str,
+            messages,
+            openai_api_key: Optional[str] = None,
+            format_class=None,
             temperature: float = 1.0,
-            top_p: Optional[float] = None,
-            top_k: Optional[int] = None,
-    ) -> List[dict]:
-        if need_tokenize:
-            # Note: before generation, you can optionally do `tokenizer.apply_chat_template(
-            #   prompts, tokenize=False, padding=False, return_tensors=None, add_generation_prompt=True/False)`
-            input_ids = tokenizer(
-                inputs,
-                padding=True,  # truncation=True, max_length=1024
-                return_tensors="pt",
-            ).to(model.device)
+            api_call_sleep: int = 3,
+            api_retry_limit: int = 10,
+            api_retry_sleep: int = 10,
+    ):
+        """
+        :param openai_model_name: The name of the OpenAI model to call.
+        :param openai_api_key: A valid OpenAI API Key or from env var ${OPENAI_API_KEY}. https://platform.openai.com/
+        :param messages: The input messages for the model.
+        :param format_class: A BaseModel to define the output response format.
+        :param temperature: The generation temperature that controls randomness.
+        :param api_call_sleep: The sleep time between API calls (to avoid hitting the limit).
+        :param api_retry_limit: The number of retries before giving up API calls.
+        :param api_retry_sleep: The sleep time before retrying API calls.
+        :return: The raw response generated by the model.
+        """
+
+        # Set up the input prompt (dialog-style) for GPT
+        if isinstance(messages, list) and len(messages) > 0:
+            input_messages = messages
+        elif isinstance(messages, str) and len(messages) > 0:
+            input_messages = [
+                {"role": "developer", "content": "You are a helpful assistant."},
+                {"role": "user", "content": messages},
+            ]
         else:
-            input_ids = inputs
-            input_ids = input_ids.to(model.device)
-        # len_input = input_ids.data["input_ids"].size(-1)
+            raise ValueError(f">>> Unsupported `messages`: {messages}")
 
-        terminators_gen = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)]
-        terminators_gen_set = set(terminators_gen)
-        terminators_gen_list = list(terminators_gen_set)
+        if openai_model_name.startswith("gpt-5"):
+            # Note: GPT-5 models only accept the default temperature value: 1.0
+            temperature = float(1.0)
+        else:
+            temperature = float(max(0.0, temperature))
 
-        # model.generation_config.pad_token_id = tokenizer.pad_token_id
-        with torch.no_grad():
-            # with torch.cuda.amp.autocast(enabled=True, dtype=model.dtype):
-            # https://huggingface.co/docs/transformers/en/main_classes/text_generation
-            response = model.generate(
-                **input_ids,
-                max_new_tokens=max_new_tokens,
-                eos_token_id=terminators_gen_list,
-                do_sample=temperature > 0.0,  # False: greedy decoding (the most deterministic)
-                temperature=temperature if temperature > 0.0 else None,  # defaults to 1.0
-                top_p=top_p,  # defaults to 1.0
-                top_k=top_k,  # defaults to 50
-                # output_attentions=False,
-                # output_hidden_states=False,
-                # output_scores=True,
-                output_logits=True,
-                return_dict_in_generate=True,
-            )
+        # assert api_call_sleep > 0 and api_retry_limit > 0 and api_retry_sleep > 0
+        if not (isinstance(openai_api_key, str) and len(openai_api_key) > 0):
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+        assert isinstance(openai_api_key, str) and len(openai_api_key) > 0, \
+            f">>> AssertionError: openai_api_key: {openai_api_key}"
 
-        # Check the last token of the current output
-        output_ids = response["sequences"]
+        try_cnt = 0
+        while True:
+            try_cnt += 1
+            try:
+                # OpenAI request
+                if format_class is None:
+                    response = openai.OpenAI(api_key=openai_api_key).with_options(
+                        timeout=900.0).chat.completions.create(
+                        model=openai_model_name,
+                        messages=input_messages,
+                        # messages=[
+                        #     {"role": "developer", "content": system_prompt},
+                        #     {"role": "user", "content": user_prompt},
+                        # ],
+                        temperature=temperature,
+                        # response_format=None,
+                        # service_tier="flex",
+                    )
+                else:
+                    # response = openai.OpenAI(api_key=openai_api_key).with_options(timeout=900.0).beta.chat.completions.parse(
+                    response = openai.OpenAI(api_key=openai_api_key).with_options(timeout=900.0).chat.completions.parse(
+                        model=openai_model_name,
+                        messages=input_messages,
+                        # messages=[
+                        #     {"role": "developer", "content": system_prompt},
+                        #     {"role": "user", "content": user_prompt},
+                        # ],
+                        temperature=temperature,
+                        response_format=format_class,
+                        # service_tier="flex",
+                    )
+                if api_call_sleep > 0:  # Regular sleep time before running next data item
+                    time.sleep(api_call_sleep)
+                break
+            except APIConnectionError as e:
+                logging.info(f">>> APIConnectionError !!! >>> Failed to connect to OpenAI API: {e}")
+                if try_cnt >= api_retry_limit:
+                    sys.exit(1)
+                time.sleep(api_retry_sleep)  # Sleep time before retrying API calls
+            except APIError as e:
+                logging.info(f">>> APIError !!! >>> OpenAI API Error: {e}")
+                if try_cnt >= api_retry_limit:
+                    sys.exit(1)
+                time.sleep(api_retry_sleep)  # Sleep time before retrying API calls
+            except RateLimitError as e:
+                logging.info(f">>> RateLimitError !!! >>> OpenAI API request exceeded rate limit: {e}")
+                if try_cnt >= api_retry_limit:
+                    sys.exit(1)
+                time.sleep(api_retry_sleep)  # Sleep time before retrying API calls
+            except Exception as e:
+                logging.info(f">>> Exception !!! >>> OpenAI Exception: {e}")
+                if try_cnt >= api_retry_limit:
+                    sys.exit(1)
+                time.sleep(api_retry_sleep)  # Sleep time before retrying API calls
 
-        last_token_id_list = [x.item() for x in list(output_ids[:, -1].cpu())]
-        end_with_eot_list = [x in terminators_gen_set for x in last_token_id_list]
+        return response
 
-        output_text = tokenizer.batch_decode(
-            output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        input_text = tokenizer.batch_decode(
-            input_ids["input_ids"], skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-        assert len(input_text) == len(output_text) == len(end_with_eot_list)
-        results = []
-        for _input, _output, _end_with_eot in zip(input_text, output_text, end_with_eot_list):
-            _output_pure = _output[len(_input):]
-            results.append({
-                "input_text": _input,
-                "output_text": _output_pure,
-                "end_with_eot": _end_with_eot,
-            })
-
-        return results
-
-    def lm_generate(
+    def gpt_generate(
             self,
             eval_task_name: str,
     ):
@@ -241,13 +222,6 @@ class LMGen:
         self.logger.info(f">>> Evaluation Task: {eval_task_name}")
         task_info = eval_task_obj.load_task()
         dataset_list = task_info["data"]
-
-        # Load the model
-        if self.model is None:
-            model = self.load_model(model_path=self.model_path, tokenizer=self.tokenizer)
-            self.model = model
-        else:
-            model = self.model
 
         # Deal with each task (and sub-tasks) - construct all input prompts
         all_prompts = dict()
@@ -293,6 +267,8 @@ class LMGen:
                 else:
                     done_cnt += 1
                     cur_prompts.append(prompt_dict)
+                    if len(cur_prompts) >= self.max_eval_num > 0:
+                        break  # `max_eval_num` limits the number of instances (per subtask) to evalaute
 
             all_prompts[ds_id] = {
                 "prompts": cur_prompts,
@@ -321,70 +297,71 @@ class LMGen:
             self.logger.info(f">>> [Dataset: {ds_id}] [Eval: {eval_split}] # = {len_dataset}")
 
             # Split the input list into mini batches
-            assert isinstance(self.bsz, int) and self.bsz >= 1
-            prompt_batches = [cur_prompts[_i: _i + self.bsz] for _i in range(0, len(cur_prompts), self.bsz)]
-            num_batches = len(prompt_batches)
+            # assert isinstance(self.bsz, int) and self.bsz >= 1
+            # prompt_batches = [cur_prompts[_i: _i + self.bsz] for _i in range(0, len(cur_prompts), self.bsz)]
+            # num_batches = len(prompt_batches)
+
+            # Note: Currently, we only use bsz=1 for GPT generation
+            assert isinstance(self.bsz, int) and self.bsz == 1
 
             # Run generation
-            item_idx = 0
-            for batch_idx, cur_prompt_batch in enumerate(prompt_batches):
-                input_prompts = []  # Batch inputs
-                assert isinstance(cur_prompt_batch, list) and len(cur_prompt_batch) > 0
-                for cur_prompt_dict in cur_prompt_batch:
-                    assert isinstance(cur_prompt_dict, dict)
-                    # item_info = cur_prompt_dict["info"]
+            for item_idx, cur_prompt_dict in enumerate(cur_prompts):
+                assert isinstance(cur_prompt_dict, dict)
 
-                    cur_prompt = self.tokenizer.apply_chat_template(
-                        cur_prompt_dict["dialog"],
-                        tokenize=False,
-                        padding=False,
-                        add_generation_prompt=True,
-                        return_tensors=None,
-                        # enable_thinking=True,  # Qwen: Switches between thinking and non-thinking modes.
-                        enable_thinking=False,  # Note: The thinking mode of Qwen may not need prompts like CoT
-                    )
-                    assert isinstance(cur_prompt, str)
-                    # cur_prompt = cur_prompt.strip()
-                    input_prompts.append(cur_prompt)
+                # Obtain the system prompt and user prompt for GPT
+                dialog = cur_prompt_dict["dialog"]
+                assert isinstance(dialog, list) and len(dialog) == 2
+                dialog_sys, dialog_user = dialog[0], dialog[1]
+                assert isinstance(dialog_sys, dict) and "role" in dialog_sys and dialog_sys["role"] == "system"
+                assert isinstance(dialog_user, dict) and "role" in dialog_user and dialog_user["role"] == "user"
+                assert "content" in dialog_sys and "content" in dialog_user
+                system_prompt = str(dialog_sys["content"]).strip()
+                user_prompt = str(dialog_user["content"]).strip()
+                gpt_input_messages = [
+                    {"role": "developer", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ]
 
-                assert len(input_prompts) == len(cur_prompt_batch) > 0
-                gen_results = self.open_model_gen(
-                    inputs=input_prompts, model=model, tokenizer=self.tokenizer, need_tokenize=True,
-                    max_new_tokens=self.max_gen_len, temperature=self.gen_temperature,
-                )
+                # Send OpenAI request
+                response = self.call_gpt(
+                    openai_model_name=self.openai_model, messages=gpt_input_messages,
+                    openai_api_key=self.openai_api_key, temperature=self.gen_temperature,
+                )  # format_class=format_class,
+                res_message = response.choices[0].message
 
-                assert isinstance(gen_results, list) and len(gen_results) == len(cur_prompt_batch) > 0
-                for cur_prompt_dict, gen_dict in zip(cur_prompt_batch, gen_results):
-                    cur_gen_output = {
-                        "model": self.hf_id,
-                        "ds_name": ds_name,
-                        "subset": subset,
-                        "eval_split": eval_split,
-                        "ds_id": ds_id,
-                        "batch_idx": batch_idx,
-                        "item_idx": item_idx,
-                        # "prompt": str(gen_dict["prompt"]),  # The input prompt
-                        "input_text": str(gen_dict["input_text"]),  # The input text
-                        "output_text": str(gen_dict["output_text"]),  # The LLM output (excluding the input)
-                        # "len_input": int(gen_dict["len_input"]),  # Number of tokens of the model input/prompt
-                        "end_with_eot": bool(gen_dict["end_with_eot"]),  # True if the output ends with end-of-text
-                        # "answers": cur_prompt_dict["answers"],  # The golden answers: List[str]
-                        # "info": cur_prompt_dict["info"],
-                        **cur_prompt_dict
-                    }
-                    item_idx += 1
+                # If the model refuses to respond, get the refusal message
+                refusal = res_message.refusal
+                if refusal:
+                    self.logger.info(f">>> !!! >>> The model refuses to respond: {refusal}")
 
-                    cur_results.append(cur_gen_output)
-                    if self.verbose and len(cur_results) % show_cnt == 0:
-                        self.logger.info(f">>> Progress: [{ds_id}] "
-                                         f"[Batch (size={self.bsz}): {batch_idx + 1} / {num_batches}] "
-                                         f"[Item: {len(cur_results)} / {len_dataset}]")
-                        # DataIO.save_jsonl(output_fp, all_results, mode="w", verbose=False)
+                cur_gen_output = {
+                    "model": self.openai_model,
+                    "ds_name": ds_name,
+                    "subset": subset,
+                    "eval_split": eval_split,
+                    "ds_id": ds_id,
+                    # "batch_idx": batch_idx,
+                    "item_idx": item_idx,
+                    # "prompt": str(gen_dict["prompt"]),  # The input prompt
+                    # "input_text": str(gen_dict["input_text"]),  # The input text
+                    "input_text": f"{system_prompt}\n\n{user_prompt}",  # The input text
+                    "output_text": str(res_message.content).strip(),  # The LLM output (excluding the input)
+                    # "len_input": int(gen_dict["len_input"]),  # Number of tokens of the model input/prompt
+                    # "end_with_eot": bool(gen_dict["end_with_eot"]),  # True if the output ends with end-of-text
+                    # "answers": cur_prompt_dict["answers"],  # The golden answers: List[str]
+                    # "info": cur_prompt_dict["info"],
+                    **cur_prompt_dict
+                }
+
+                cur_results.append(cur_gen_output)
+                if self.verbose and len(cur_results) % show_cnt == 0:
+                    self.logger.info(f">>> Progress: [{ds_id}] [Item: {len(cur_results)} / {len_dataset}]")
+                    # DataIO.save_jsonl(output_fp, all_results, mode="w", verbose=False)
 
             all_results[ds_id] = cur_results
 
         # Save the generation outputs and show logs
-        output_dir = os.path.join(self.output_dir, eval_task_name, self.hf_name)
+        output_dir = os.path.join(self.output_dir, eval_task_name, self.openai_model)
         os.makedirs(output_dir, exist_ok=True)
         output_fp = os.path.join(output_dir, "results_gen.json")
         if os.path.exists(output_fp):
@@ -393,7 +370,7 @@ class LMGen:
             self.logger.info(f"Results will be saved at: {output_fp}")
         DataIO.save_json(output_fp, all_results, indent=2, verbose=self.verbose)
         self.logger.info(
-            f">>> DONE ALL. hf_id = {self.hf_id}; model_path = {self.model_path}\n"
+            f">>> DONE ALL. openai_model = {self.openai_model};\n"
             f"use_swi: {self.use_swi}, gen_temperature: {self.gen_temperature}, batch_size: {self.bsz}"
         )
 
@@ -401,7 +378,8 @@ class LMGen:
 def main(
     task: int = 1,
     eval_task_name: Optional[str] = None,
-    hf_id: Optional[str] = None,
+    openai_model: str = "gpt-5-mini",
+    openai_api_key: Optional[str] = None,
     cache_dir: Optional[str] = None,
     project_dir: Optional[str] = None,
     seed: int = 42,
@@ -410,7 +388,7 @@ def main(
     verbose: bool = False,
     debug: bool = False,
     output_dir: Optional[str] = None,
-    max_gen_len: int = 4096,
+    max_eval_num: int = -1,
     gen_temperature: float = 0.0,
     swi_version: int = 0,
     use_swi: bool = False,
@@ -426,7 +404,8 @@ def main(
 
     :param task: 1. language model generation.
     :param eval_task_name: The name(s) of the evaluation task. (e.g., "xsum", "xlsum", and "gsm8k,math500")
-    :param hf_id: ORGANIZATION_NAME/MODEL_NAME, e.g., "meta-llama/Llama-3.1-8B-Instruct"
+    :param openai_model: The OpenAI model to generate results, e.g., "gpt-5-mini" and "gpt-4o"
+    :param openai_api_key: The OpenAI API KEY. None: loading from the env variable ${OPENAI_API_KEY}.
     :param cache_dir: The root directory of the cache.
     :param project_dir: The root directory of the current project/repo.
     :param seed: Random seed of all modules.
@@ -435,7 +414,7 @@ def main(
     :param verbose: Verbose mode: show logs.
     :param debug: Debugging / developing mode.
     :param output_dir: The path to the output file where the result metrics will be saved.
-    :param max_gen_len: The maximum number of newly generated tokens.
+    :param max_eval_num: The maximum number of instance (per subtask) to evaluate.
     :param gen_temperature: The temperature used in LLM generation. Default: 0.0
     :param swi_version: The SWI prompt version to use. Default: 0. Choices: 0, 1, 2, 3, 4, 5.
     :param use_swi: Use our SWI method or not. SWI: Speaking with Intent
@@ -448,7 +427,7 @@ def main(
     timer_start = time.perf_counter()
 
     # Setup of the logger, CUDA gpus, and random seed
-    logger = logger_setup("LM_Gen")
+    logger = logger_setup("GPT_Gen")
     cuda_dict = cuda_setup(cuda=cuda, logger=logger, verbose=verbose)
     random_setup(seed=seed, has_cuda=cuda_dict["has_cuda"])
 
@@ -468,18 +447,19 @@ def main(
         logger.info(f">>> Manually fix potential issues about `modeling_utils.ALL_PARALLEL_STYLES`")
         modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
 
-    lm_gen = LMGen(
+    gpt_gen = GPTGen(
         verbose=verbose,
         logger=logger,
         cuda_dict=cuda_dict,
         seed=seed,
         cache_dir=cache_dir,
         project_dir=project_dir,
-        hf_id=hf_id,
+        openai_model=openai_model,
+        openai_api_key=openai_api_key,
         bsz=max(int(bsz), 1),
         debug=debug,
         output_dir=output_dir,
-        max_gen_len=int(max_gen_len),
+        max_eval_num=int(max_eval_num),
         gen_temperature=float(gen_temperature),
         swi_version=int(swi_version),
         use_swi=use_swi,
@@ -495,12 +475,12 @@ def main(
                 for cur_task_name in eval_task_name:
                     cur_task_name = str(cur_task_name).strip()
                     logger.info(f">>> <START> {cur_task_name}\n")
-                    lm_gen.lm_generate(eval_task_name=cur_task_name)
+                    gpt_gen.gpt_generate(eval_task_name=cur_task_name)
                     logger.info(f">>> <END> {cur_task_name}\n\n\n")
             elif isinstance(eval_task_name, str):
                 eval_task_name = str(eval_task_name).strip()
                 logger.info(f">>> <START> {eval_task_name}\n")
-                lm_gen.lm_generate(eval_task_name=eval_task_name)
+                gpt_gen.gpt_generate(eval_task_name=eval_task_name)
                 logger.info(f">>> <END> {eval_task_name}\n\n\n")
             else:
                 raise ValueError(f"--eval_task_name should be a tuple/list/str: {eval_task_name}")

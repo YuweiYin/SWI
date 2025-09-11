@@ -24,24 +24,9 @@ import evaluate
 from datasets.download.download_config import DownloadConfig
 from evaluate_metrics.sentence_transformers import SentenceTransformer
 
-# Text Summarization (Sum)
-from tasks.cnn_dailymail import EvalTaskCnnDailymail
-from tasks.xsum import EvalTaskXSum
-from tasks.xlsum import EvalTaskXlSum
-from tasks.dialogsum import EvalTaskDialogSum
-from tasks.wiki_lingua import EvalTaskWikiLingua
-
-# Multi-task Multiple-choice Question Answering (QA)
-from tasks.bbh import EvalTaskBbh
-from tasks.mmlu import EvalTaskMmlu
-from tasks.mmlu_pro import EvalTaskMmluPro
-
-# Mathematical Reasoning (Math)
-from tasks.gsm8k import EvalTaskGSM8K
-from tasks.gsm8k_platinum import EvalTaskGSM8KPlatinum
-from tasks.math500 import EvalTaskMATH500
-
 from utils.init_functions import logger_setup, cuda_setup, random_setup
+from utils.data_io import DataIO
+from tasks.tasks_utils import *
 
 
 class LMEval:
@@ -96,32 +81,16 @@ class LMEval:
         if self.verbose:
             self.logger.info(f">>> cache_dir: {self.cache_dir}")
 
-        os.environ["TRANSFORMERS_CACHE"] = self.cache_dir
         os.environ["HF_HOME"] = self.cache_dir
-        self.model_path = os.path.join(
-            self.cache_dir, "models--" + self.hf_name, "snapshots/model")
+        local_model_path = os.path.join(self.cache_dir, "models--" + self.hf_name, "snapshots/model")
+        self.model_path = local_model_path if os.path.isdir(local_model_path) else hf_id
 
-        self.task_class_dict = {
-            # Text Summarization (Sum)
-            "cnn_dailymail": EvalTaskCnnDailymail,
-            "xsum": EvalTaskXSum,
-            "xlsum": EvalTaskXlSum,
-            "dialogsum": EvalTaskDialogSum,
-            "wiki_lingua": EvalTaskWikiLingua,
-            # Multi-task Multiple-choice Question Answering (QA)
-            "bbh": EvalTaskBbh,
-            "mmlu": EvalTaskMmlu,
-            "mmlu_pro": EvalTaskMmluPro,
-            # Mathematical Reasoning (Math)
-            "gsm8k": EvalTaskGSM8K,
-            "gsm8k_platinum": EvalTaskGSM8KPlatinum,
-            "math500": EvalTaskMATH500,
-        }
-        self.sum_set = {"cnn_dailymail", "xsum", "xlsum", "dialogsum", "wiki_lingua"}
-        self.math_set = {"gsm8k", "gsm8k_platinum", "math500"}
-        self.mcqa_set = {"bbh", "mmlu", "mmlu_pro"}
+        self.task_class_dict = TASK_CLASS_DICT
+        self.sum_class_dict = SUM_CLASS_DICT
+        self.qa_class_dict = QA_CLASS_DICT
+        self.math_class_dict = MATH_CLASS_DICT
 
-        if self.eval_task_name in self.mcqa_set:
+        if self.eval_task_name in self.qa_class_dict:
             assert os.path.isdir(self.model_path), f"AssertionError: assert os.path.isdir({self.model_path})"
             # Tokenizer and LLM model
             self.tokenizer = self.load_tokenizer(model_path=self.model_path, padding_side="left", truncation_side="left")
@@ -160,7 +129,7 @@ class LMEval:
             self.eval_meteor = None
             self.eval_chrf = None
             self.eval_bertscore = None
-            if self.eval_task_name in self.sum_set:
+            if self.eval_task_name in self.sum_class_dict:
                 sys.exit(1)
         self.sbert_model_en = None  # English-only Sentence Transformer
         self.sbert_model_x = None   # Multilingual Sentence Transformer
@@ -205,15 +174,6 @@ class LMEval:
         self.lang2code = {v: k for k, v in self.code2lang.items()}
         self.punc_remover = str.maketrans("", "", string.punctuation)  # r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
         self.space_remover = str.maketrans("", "", string.whitespace)  # " \t\n\r\v\f"
-
-    @staticmethod
-    def _handle_non_serializable(o):
-        if isinstance(o, np.int64) or isinstance(o, np.int32):
-            return int(o)
-        elif isinstance(o, set):
-            return list(o)
-        else:
-            return str(o)
 
     def load_tokenizer(
             self,
@@ -627,9 +587,9 @@ class LMEval:
         options = [str(_op).strip() for _op in options]
 
         # Accuracy score: select the option with the lowest LLM perplexity / avg nll_loss
-        assert "gen_prompt" in kwargs
-        gen_prompt = str(kwargs["gen_prompt"]).strip()
-        concat_prompts = [f"{gen_prompt}\n{prediction}\nFinal Answer: {_op}" for _op in options]
+        assert "input_text" in kwargs
+        input_text = str(kwargs["input_text"]).strip()
+        concat_prompts = [f"{input_text}\n{prediction}\nFinal Answer: {_op}" for _op in options]
 
         # Load the model (only the first time)
         if self.model is None:
@@ -829,7 +789,7 @@ class LMEval:
             cur_ds_results = []
             for idx, cur_res_dict in enumerate(cur_results):
                 # Load the attributes of the data item
-                gen_prompt = str(cur_res_dict["prompt"]).strip()
+                input_text = str(cur_res_dict["input_text"]).strip()
                 prediction = str(cur_res_dict["output_text"]).strip()  # model prediction to evaluate
                 references = cur_res_dict["answers"]  # golden references (correct answers)
                 references = [str(_ref).strip() for _ref in references]
@@ -909,12 +869,12 @@ class LMEval:
                     if isinstance(pred_final, str):
                         cur_score = cur_metric_func(
                             prediction=prediction, references=references, item_info=info,
-                            gen_prompt=gen_prompt, pred_final=pred_final, lang_code=lang_code)
+                            input_text=input_text, pred_final=pred_final, lang_code=lang_code)
                     elif isinstance(pred_final, list):  # If we have multiple candidate predictions
                         assert len(pred_final) > 0
                         cur_score = cur_metric_func(
                             prediction=prediction, references=references, item_info=info,
-                            gen_prompt=gen_prompt, pred_final=pred_final[0], lang_code=lang_code)
+                            input_text=input_text, pred_final=pred_final[0], lang_code=lang_code)
                         assert isinstance(cur_score, dict) and "score" in cur_score
                         _best_score_value = cur_score["score"]  # To pick the candidate with the best score
 
@@ -922,7 +882,7 @@ class LMEval:
                             assert isinstance(_pred_final, str)
                             _cur_score = cur_metric_func(
                                 prediction=prediction, references=references, item_info=info,
-                                gen_prompt=gen_prompt, pred_final=_pred_final, lang_code=lang_code)
+                                input_text=input_text, pred_final=_pred_final, lang_code=lang_code)
                             assert isinstance(_cur_score, dict) and "score" in _cur_score
                             _cur_score_value = _cur_score["score"]
                             if _cur_score_value >= _best_score_value:
@@ -940,6 +900,26 @@ class LMEval:
                         cur_ds_score_values[cur_metric] = [cur_score_value]
                     else:
                         cur_ds_score_values[cur_metric].append(cur_score_value)
+
+                    if cur_metric == "rouge":  # Save all types of ROUGE scores
+                        assert "rouge1" in cur_score and "rouge2" in cur_score, cur_score
+                        assert "rougeL" in cur_score and "rougeLsum" in cur_score, cur_score
+                        if "rouge1" not in cur_ds_score_values:
+                            cur_ds_score_values["rouge1"] = [float(cur_score["rouge1"])]
+                        else:
+                            cur_ds_score_values["rouge1"].append(float(cur_score["rouge1"]))
+                        if "rouge2" not in cur_ds_score_values:
+                            cur_ds_score_values["rouge2"] = [float(cur_score["rouge2"])]
+                        else:
+                            cur_ds_score_values["rouge2"].append(float(cur_score["rouge2"]))
+                        if "rougeL" not in cur_ds_score_values:
+                            cur_ds_score_values["rougeL"] = [float(cur_score["rougeL"])]
+                        else:
+                            cur_ds_score_values["rougeL"].append(float(cur_score["rougeL"]))
+                        if "rougeLsum" not in cur_ds_score_values:
+                            cur_ds_score_values["rougeLsum"] = [float(cur_score["rougeLsum"])]
+                        else:
+                            cur_ds_score_values["rougeLsum"].append(float(cur_score["rougeLsum"]))
 
                 cur_ds_results.append(cur_res_dict)
                 if self.verbose and len(cur_ds_results) % show_cnt == 0:
@@ -1008,14 +988,7 @@ class LMEval:
                          f"[# Missing Final Answer = {miss_final_cnt_total}]\n")
 
         # Save the generation outputs
-        dumped = json.dumps(
-            all_scores,
-            indent=2,  # indent=None,
-            default=self._handle_non_serializable,
-            ensure_ascii=True,
-        )
-        with open(output_eval_fp, "w", encoding="utf-8") as fp_out:
-            fp_out.write(dumped)
+        DataIO.save_json(output_eval_fp, all_scores, indent=2, verbose=self.verbose)
         self.logger.info(
             f">>> hf_id = {self.hf_id}; model_path = {self.model_path}\n"
             f"output_dir: {output_dir}"
@@ -1023,7 +996,7 @@ class LMEval:
 
 
 def main(
-    task: int = 0,
+    task: int = 1,
     eval_task_name="",
     eval_metric_name="ALL",
     hf_id: Optional[str] = None,
@@ -1065,8 +1038,8 @@ def main(
     cuda_dict = cuda_setup(cuda=cuda, logger=logger, verbose=verbose)
     random_setup(seed=seed, has_cuda=cuda_dict["has_cuda"])
 
-    if isinstance(kwargs, dict):
-        logger.info(f">>> Unused parameters in kwargs: {kwargs}")
+    if isinstance(kwargs, dict) and len(kwargs) > 0:
+        logger.info(f">>> Extra parameters in kwargs: {kwargs}")
     logger.info(f">>> cuda_dict: {cuda_dict}")
 
     if isinstance(cache_dir, str) and os.path.isdir(cache_dir):

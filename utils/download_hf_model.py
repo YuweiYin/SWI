@@ -53,7 +53,7 @@ def main(
     # Cache directory setup
     if not os.path.isdir(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
-    os.environ["TRANSFORMERS_CACHE"] = cache_dir
+    os.environ["HF_HOME"] = cache_dir
     logger.info(f">>> cache_dir: {cache_dir}")
 
     hf_name = "--".join(hf_id.split("/"))

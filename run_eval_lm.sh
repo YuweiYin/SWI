@@ -53,7 +53,7 @@ if [[ -z ${GEN_TEMP} ]]; then
   GEN_TEMP="0.0"
 fi
 
-MODEL_NAME="${MODEL//[\/]/_}"
+MODEL_NAME="${MODEL//[\/]/--}"
 #SEED=42
 
 echo -e "TASK: ${TASK}"

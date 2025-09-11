@@ -2,7 +2,7 @@
 
 CACHE_DIR=$1
 if [[ -z ${CACHE_DIR} ]]; then
-  CACHE_DIR="${HOME}/projects/def-carenini/yuweiyin/.cache/huggingface/"
+  CACHE_DIR="${HOME}/.cache/huggingface/"
 fi
 
 HF_TOKEN=$2

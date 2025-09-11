@@ -21,7 +21,7 @@ def main(
         hf_id: Optional[str] = None,
         subset: Optional[str] = None,
         cache_dir: Optional[str] = None,
-        trust_remote_code: bool = False,
+        # trust_remote_code: bool = False,
         # verbose: bool = False,
 ) -> None:
     """
@@ -31,7 +31,7 @@ def main(
     :param hf_id: HuggingFace dataset id (ORGANIZATION_NAME/DATASET_NAME), e.g., "allenai/ai2_arc"
     :param subset: Name of the dataset subset, e.g., "ARC-Easy" or "ARC-Challenge"
     :param cache_dir: The root directory of the cache, e.g., "${HOME}/.cache/huggingface/"
-    :param trust_remote_code: Whether to allow for datasets defined on the Hub using a dataset script.
+    # :param trust_remote_code: Whether to allow for datasets defined on the Hub using a dataset script.
     # :param verbose: Verbose mode: show logs.
     :return: None.
     """
@@ -54,7 +54,7 @@ def main(
     cache_dir = os.path.join(cache_dir, "datasets")
     if not os.path.isdir(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
-    os.environ["TRANSFORMERS_CACHE"] = cache_dir
+    os.environ["HF_HOME"] = cache_dir
     logger.info(f">>> cache_dir: {cache_dir}")
 
     if isinstance(subset, str):
@@ -73,7 +73,7 @@ def main(
             hf_id,
             _ds_name,
             cache_dir=cache_dir,
-            trust_remote_code=trust_remote_code
+            # trust_remote_code=trust_remote_code,
         )
         logger.info(f">>> [{hf_id} --- {_ds_name}] len(dataset) = {len(dataset)}")
 

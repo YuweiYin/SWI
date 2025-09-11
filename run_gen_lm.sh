@@ -53,7 +53,7 @@ if [[ -z ${MAX_GEN_LEN} ]]; then
   MAX_GEN_LEN="4096"
 fi
 
-MODEL_NAME="${MODEL//[\/]/_}"
+MODEL_NAME="${MODEL//[\/]/--}"
 
 echo -e "TASK: ${TASK}"
 echo -e "SEED: ${SEED}"

@@ -59,7 +59,7 @@ if [[ -z ${SWI_VERSION} ]]; then
   SWI_VERSION="0"
 fi
 
-MODEL_NAME="${MODEL//[\/]/_}"
+MODEL_NAME="${MODEL//[\/]/--}"
 
 echo -e "TASK: ${TASK}"
 echo -e "SEED: ${SEED}"

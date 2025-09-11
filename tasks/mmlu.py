@@ -8,10 +8,10 @@ from typing import Optional, Dict, Any
 
 from datasets import load_dataset
 
-from tasks import EvalTaskManager
+from tasks import TaskManager
 
 
-class EvalTaskMmlu(EvalTaskManager):
+class TaskMmlu(TaskManager):
 
     def __init__(
             self,
@@ -21,14 +21,10 @@ class EvalTaskMmlu(EvalTaskManager):
             project_dir: Optional[str] = None,
             **kwargs,
     ):
-        super().__init__(verbose, logger, cache_dir, project_dir)
+        super().__init__(verbose, logger, cache_dir, project_dir, **kwargs)
 
         # MMLU: Question Answering (Multiple-Choice QA) (57 subtasks)
         # Train = 0, Validation = 1514, Test = 13842
-        # Features: ["question", "subject", "choices", "answer"]
-        # Eval: test set
-        # >>> [use_swi = False] >>> #Sub-Tasks = 57; #Total Ins. = 14042; avg_len_token: 193.011; std_len_token: 91.976
-        # >>> [use_swi = True] >>> #Sub-Tasks = 57; #Total Ins. = 14042; avg_len_token: 338.011; std_len_token: 91.976
 
         self.task_name = "mmlu"
         self.task_info = {
@@ -93,12 +89,6 @@ class EvalTaskMmlu(EvalTaskManager):
             ],
         }
 
-        add_def = "add_def" in kwargs and kwargs["add_def"]
-        intent_def = """
-The intent is a usually clearly formulated or planned intention, or the act or fact of intending. \
-Some synonyms of intent are intention, purpose, aim, goal, and objective.
-        """.strip()
-
         self.system_prompt_raw = f"""
 You are a helpful assistant. \
 You are good at answering questions and logical reasoning. \
@@ -117,9 +107,6 @@ During generation, follow all the requirements below:
 The content within the intent tags must begin with "To" followed by a verb, such as "To accomplish a task."
 4. At last, clearly and concisely give your final answer starting with "Final Answer:"
         """.strip()
-
-        if add_def:
-            self.system_prompt_swi = intent_def + "\n\n" + self.system_prompt_swi
 
     def load_task(
             self,
