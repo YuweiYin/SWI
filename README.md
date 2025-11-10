@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) &nbsp;
 [![arXiv](https://img.shields.io/badge/arXiv-2503.21544-b31b1b.svg)](https://arxiv.org/abs/2503.21544)
 
-<img src="https://yuweiyin.com/files/img/2025-03-27-SWI.jpg" alt="SWI" width="400" height="auto">
+<img src="https://yuweiyin.com/files/img/2025-10-29-SWI.jpg" alt="SWI" width="400" height="auto">
 
 </div>
 
@@ -14,7 +14,8 @@
 * **SWI**: Speaking with Intent in Large Language Models
 * **Authors**: [Yuwei Yin](https://www.yuweiyin.com/), [EunJeong Hwang](https://eujhwang.github.io/), and [Giuseppe Carenini](https://www.cs.ubc.ca/~carenini/)
 * **Publication**: The 18th International Natural Language Generation Conference ([INLG 2025](https://2025.inlgmeeting.org/))
-* **Paper**: https://huggingface.co/papers/2503.21544
+  * INLG 2025 Paper: https://aclanthology.org/2025.inlg-main.39
+  * arXiv Preprint: https://arxiv.org/abs/2503.21544
 
 ```text
 Intent, typically clearly formulated and planned, functions as a cognitive framework for communication and 
@@ -386,15 +387,17 @@ Please refer to the [LICENSE](./LICENSE) file for more details.
 
 ## Citation
 
-* **Paper** (arXiv): https://arxiv.org/abs/2503.21544
-
 ```bibtex
-@article{yin2025swi,
-  title   = {SWI: Speaking with Intent in Large Language Models},
-  author  = {Yin, Yuwei and Hwang, EunJeong and Carenini, Giuseppe},
-  journal = {arXiv preprint arXiv:2503.21544},
-  year    = {2025},
-  url     = {https://arxiv.org/abs/2503.21544},
+@inproceedings{yin2025swi,
+  title     = {SWI: Speaking with Intent in Large Language Models},
+  author    = {Yin, Yuwei and Hwang, Eunjeong and Carenini, Giuseppe},
+  booktitle = {Proceedings of the 18th International Natural Language Generation Conference},
+  month     = {October},
+  year      = {2025},
+  address   = {Hanoi, Vietnam},
+  publisher = {Association for Computational Linguistics},
+  pages     = {684--698},
+  url       = {https://aclanthology.org/2025.inlg-main.39}
 }
 ```
 
